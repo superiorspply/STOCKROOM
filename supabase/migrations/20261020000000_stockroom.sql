@@ -1,8 +1,9 @@
 -- Stockroom: multi-company inventory app.
+-- Safe to run more than once: it only adds what is missing and refreshes rules and functions.
 -- Every row belongs to a company; row-level security keeps each company's data private to its members.
 
 -- ---------- tables ----------
-create table public.companies (
+create table if not exists public.companies (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(btrim(name)) between 1 and 80),
   logo text check (logo is null or (logo like 'data:image/%' and char_length(logo) < 400000)),
@@ -10,7 +11,7 @@ create table public.companies (
   created_at timestamptz not null default now()
 );
 
-create table public.members (
+create table if not exists public.members (
   company_id uuid not null references public.companies(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   role text not null check (role in ('owner','admin','staff','viewer')),
@@ -18,9 +19,9 @@ create table public.members (
   created_at timestamptz not null default now(),
   primary key (company_id, user_id)
 );
-create index members_user_idx on public.members(user_id);
+create index if not exists members_user_idx on public.members(user_id);
 
-create table public.invites (
+create table if not exists public.invites (
   code text primary key default replace(gen_random_uuid()::text, '-', ''),
   company_id uuid not null references public.companies(id) on delete cascade,
   role text not null check (role in ('admin','staff','viewer')),
@@ -30,10 +31,10 @@ create table public.invites (
   used_by uuid references auth.users(id) on delete set null,
   used_at timestamptz
 );
-create index invites_company_idx on public.invites(company_id);
+create index if not exists invites_company_idx on public.invites(company_id);
 
 -- App data, stored as documents: (company, collection, id) -> json.
-create table public.docs (
+create table if not exists public.docs (
   company_id uuid not null references public.companies(id) on delete cascade,
   coll text not null check (coll ~ '^[a-z][a-z0-9_]{0,39}$'),
   id text not null check (char_length(id) between 1 and 200),
@@ -70,32 +71,42 @@ alter table public.members enable row level security;
 alter table public.invites enable row level security;
 alter table public.docs enable row level security;
 
+drop policy if exists companies_read on public.companies;
 create policy companies_read on public.companies for select to authenticated
   using (public.my_role(id) is not null);
+drop policy if exists companies_edit on public.companies;
 create policy companies_edit on public.companies for update to authenticated
   using (public.my_role(id) in ('owner','admin')) with check (public.my_role(id) in ('owner','admin'));
+drop policy if exists companies_delete on public.companies;
 create policy companies_delete on public.companies for delete to authenticated
   using (public.my_role(id) = 'owner');
 
+drop policy if exists members_read on public.members;
 create policy members_read on public.members for select to authenticated
   using (public.my_role(company_id) is not null);
 
+drop policy if exists invites_read on public.invites;
 create policy invites_read on public.invites for select to authenticated
   using (public.my_role(company_id) in ('owner','admin'));
+drop policy if exists invites_delete on public.invites;
 create policy invites_delete on public.invites for delete to authenticated
   using (public.my_role(company_id) in ('owner','admin'));
 
+drop policy if exists docs_read on public.docs;
 create policy docs_read on public.docs for select to authenticated
   using (case when public.is_private_doc(coll, id) then public.my_role(company_id) in ('owner','admin')
               else public.my_role(company_id) is not null end);
+drop policy if exists docs_insert on public.docs;
 create policy docs_insert on public.docs for insert to authenticated
   with check (case when coll = 'settings' then public.my_role(company_id) in ('owner','admin')
                    else public.my_role(company_id) in ('owner','admin','staff') end);
+drop policy if exists docs_update on public.docs;
 create policy docs_update on public.docs for update to authenticated
   using (case when coll = 'settings' then public.my_role(company_id) in ('owner','admin')
               else public.my_role(company_id) in ('owner','admin','staff') end)
   with check (case when coll = 'settings' then public.my_role(company_id) in ('owner','admin')
                    else public.my_role(company_id) in ('owner','admin','staff') end);
+drop policy if exists docs_delete on public.docs;
 create policy docs_delete on public.docs for delete to authenticated
   using (case when coll = 'settings' then public.my_role(company_id) in ('owner','admin')
               else public.my_role(company_id) in ('owner','admin','staff') end);
@@ -206,9 +217,11 @@ begin
     'change', 'company:' || r.company_id::text, true);
   return null;
 end $$;
+drop trigger if exists docs_broadcast on public.docs;
 create trigger docs_broadcast after insert or update or delete on public.docs
   for each row execute function public.docs_broadcast();
 
+drop policy if exists company_listen on realtime.messages;
 create policy company_listen on realtime.messages for select to authenticated
   using (realtime.topic() like 'company:%'
          and public.my_role(public.try_uuid(split_part(realtime.topic(), ':', 2))) is not null);
@@ -220,9 +233,11 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('photos', 'photos', true, 10485760, array['image/jpeg','image/png','image/webp'])
 on conflict (id) do nothing;
 
+drop policy if exists photos_insert on storage.objects;
 create policy photos_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'photos'
               and public.my_role(public.try_uuid((storage.foldername(name))[1])) in ('owner','admin','staff'));
+drop policy if exists photos_delete on storage.objects;
 create policy photos_delete on storage.objects for delete to authenticated
   using (bucket_id = 'photos'
          and public.my_role(public.try_uuid((storage.foldername(name))[1])) in ('owner','admin','staff'));

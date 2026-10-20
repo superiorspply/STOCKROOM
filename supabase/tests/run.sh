@@ -4,9 +4,11 @@
 #   With a connection string (e.g. in CI):            DATABASE_URL=postgres://postgres:pw@localhost/postgres supabase/tests/run.sh
 # Exits non-zero if any check fails.
 set -e
+export PGOPTIONS="-c client_min_messages=warning"
 D="$(cd "$(dirname "$0")/.." && pwd)"
 SQL="$(mktemp /tmp/stockroom_test.XXXXXX.sql)"
-cat "$D/tests/stubs.sql" "$D"/migrations/*.sql "$D/tests/security_test.sql" > "$SQL"
+# Migrations are applied twice to prove they are safe to re-run.
+cat "$D/tests/stubs.sql" "$D"/migrations/*.sql "$D"/migrations/*.sql "$D/tests/security_test.sql" > "$SQL"
 chmod 644 "$SQL"
 if [ -n "$DATABASE_URL" ]; then
   psql "$DATABASE_URL" -q -X -c "drop database if exists stockroom_test with (force)" -c "create database stockroom_test"

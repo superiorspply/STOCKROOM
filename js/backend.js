@@ -275,7 +275,7 @@ const css = `
 #gate{position:fixed;inset:0;z-index:60;background:var(--bg,#09090b);color:var(--ink,#f6f6f8);overflow:auto;display:flex;justify-content:center;align-items:flex-start;padding:max(48px,env(safe-area-inset-top)) 16px 40px}
 #gate .gbox{width:100%;max-width:420px}
 #gate .glogo{display:flex;align-items:center;gap:12px;margin:0 0 26px}
-#gate .glogo i{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#ff3b4a,#8f0c18);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:22px;color:#fff;box-shadow:0 8px 24px rgba(229,25,43,.4)}
+#gate .glogo img{width:52px;height:52px;border-radius:15px;box-shadow:0 8px 24px rgba(229,25,43,.4)}
 #gate .glogo b{display:block;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:26px;letter-spacing:-.02em;line-height:1.1}
 #gate .glogo span{color:var(--muted,#9a9aa6);font-size:14px}
 #gate h2{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:24px;margin:0 0 6px;letter-spacing:-.02em}
@@ -312,7 +312,7 @@ let gateEl = null;
 function gate(...content){
   if (!gateEl){ gateEl = h('div', {id:'gate', role:'dialog', 'aria-modal':'true'}); document.body.append(gateEl); document.body.classList.add('locked'); }
   gateEl.replaceChildren(h('div', {class:'gbox'},
-    h('div', {class:'glogo'}, h('i', {}, 'S'), h('div', {}, h('b', {}, 'Stockroom'), h('span', {}, 'Inventory, orders and sales for your business'))),
+    h('div', {class:'glogo'}, h('img', {src:'icons/icon.svg', alt:''}), h('div', {}, h('b', {}, 'Stockroom'), h('span', {}, 'Inventory, orders and sales for your business'))),
     content));
   const f = gateEl.querySelector('input'); if (f && !gateEl.contains(document.activeElement)) f.focus();
 }

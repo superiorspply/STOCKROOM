@@ -1,0 +1,72 @@
+name: Test and publish site
+
+# Every change to main is checked, then published to GitHub Pages.
+# Pull requests are checked but not published.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pw
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Database security tests
+        env:
+          DATABASE_URL: postgres://postgres:pw@localhost:5432/postgres
+        run: sh supabase/tests/run.sh
+      - name: JavaScript syntax
+        run: |
+          node --check js/backend.js
+          node --check config.js
+          python3 - <<'EOF'
+          import re, subprocess, tempfile
+          html = open('index.html').read()
+          for i, js in enumerate(re.findall(r'<script>(.*?)</script>', html, re.S)):
+              f = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False); f.write(js); f.close()
+              subprocess.run(['node', '--check', f.name], check=True)
+          print('index.html scripts OK')
+          EOF
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect site files
+        run: |
+          mkdir _site
+          cp index.html config.js _site/
+          cp -r js _site/js
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

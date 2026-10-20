@@ -1,0 +1,39 @@
+# Stockroom
+
+A multi-company inventory, orders and sales web app. It's a static site on GitHub Pages with Supabase behind it for Postgres, auth, storage and realtime. Setup steps for the owner are in `SETUP.md`.
+
+## Layout
+
+- `index.html`: the whole app UI in one file (originally a claude.ai artifact). It talks to storage only through `window.claude.use('db'|'user'|'downloads'|'assets')`.
+- `js/backend.js`: implements that `window.claude` runtime on Supabase:
+  - a Firestore-like `db` (`doc/collection/onSnapshot/set/update/delete`)
+  - roles
+  - downloads
+  - photo uploads, plus `window.photoSrc`
+  - the sign-in gate, company picker, account/team sheet and backup import
+
+  `STOCKROOM.brand()` and `STOCKROOM.logo()` give the current company's name and logo.
+- `config.js`: Supabase URL and anon key (public by design).
+- `supabase/migrations/`: the schema. All app data lives in `docs(company_id, coll, id, data jsonb)`.
+  - Row-level security uses `my_role(company_id)`. Roles are `owner`, `admin`, `staff` and `viewer`.
+  - `settings/*` documents are writable by owner/admin only. `settings/stockx` is readable by owner/admin only.
+  - Changes are broadcast on the private Realtime topic `company:<id>`.
+  - Photos are stored at `photos/<company id>/<random>.jpg`.
+- `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js` and `js/` to Pages on every push to `main`.
+
+## Rules
+
+- Never put customer or business data in this repo. The repo is public.
+- Schema changes go in a **new** migration file. The owner applies it in the Supabase SQL editor, so tell them when one needs running.
+- Keep `index.html` talking to storage only through the `window.claude` runtime, so the app logic and the backend stay separate.
+
+## Testing
+
+- Database security: `supabase/tests/run.sh`. It needs local PostgreSQL; `pg_ctlcluster 16 main start` starts it. CI runs this script too. Add a check to `supabase/tests/security_test.sql` for any new rule.
+- Full app in a browser: see `dev/README.md`. Briefly:
+  1. `cd dev && npm install`
+  2. Put the `postgrest` binary on your PATH.
+  3. `node dev/server.mjs &`
+  4. `node dev/tests/e2e.mjs`
+
+  The local server is real Postgres plus PostgREST running the real migration, with small stand-ins for auth, storage and realtime.

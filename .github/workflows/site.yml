@@ -64,6 +64,15 @@ jobs:
           cp index.html config.js manifest.webmanifest _site/
           cp -r js icons _site/
           touch _site/.nojekyll
+          # Stamp script and icon links with this commit so phones load each update right away
+          # instead of reusing an older cached copy.
+          V="${GITHUB_SHA::8}"
+          sed -i -e "s#src=\"config.js\"#src=\"config.js?v=$V\"#" \
+                 -e "s#src=\"js/backend.js\"#src=\"js/backend.js?v=$V\"#" \
+                 -e "s#href=\"icons/\([^\"]*\)\"#href=\"icons/\1?v=$V\"#g" \
+                 -e "s#href=\"manifest.webmanifest\"#href=\"manifest.webmanifest?v=$V\"#" _site/index.html
+          sed -i "s#'icons/icon.svg'#'icons/icon.svg?v=$V'#" _site/js/backend.js
+          grep -q "js/backend.js?v=$V" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

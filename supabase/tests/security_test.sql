@@ -23,7 +23,7 @@ grant execute on all functions in schema t to authenticated, anon;
 insert into auth.users values
  ('00000000-0000-0000-0000-00000000000a', 'owner@a.com'), ('00000000-0000-0000-0000-00000000000b', 'owner@b.com'),
  ('00000000-0000-0000-0000-0000000000a1', 'staff@a.com'), ('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com'),
- ('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+ ('00000000-0000-0000-0000-0000000000a3', 'admin@a.com'), ('00000000-0000-0000-0000-0000000000ff', 'support@stockroom.test');
 
 set role authenticated;
 -- Owner A creates company A; owner B creates company B.
@@ -125,6 +125,39 @@ update public.companies set name = 'Acme Co' where id = (select v::uuid from ids
 select t.ok((select name from public.companies) = 'Acme Co', 'owner can rename company');
 select t.fails($$update public.companies set logo = 'javascript:alert(1)'$$, 'logo must be an image');
 
+-- Support access.
+select t.as_user('00000000-0000-0000-0000-0000000000ff', 'support@stockroom.test');
+select t.ok(not public.is_platform_admin(), 'a normal user is not support');
+select t.fails($$select * from public.support_companies()$$, 'a normal user cannot list all companies');
+select t.fails($$select * from public.support_open((select v::uuid from ids where k='A'))$$, 'a normal user cannot open a company as support');
+select t.fails($$insert into public.platform_admins values (auth.uid())$$, 'nobody can make themselves support');
+select t.ok(t.count('select * from public.docs') = 0, 'before being made support, sees no data');
+reset role;
+insert into public.platform_admins values ('00000000-0000-0000-0000-0000000000ff');
+set role authenticated;
+select t.as_user('00000000-0000-0000-0000-0000000000ff', 'support@stockroom.test');
+select t.ok(public.is_platform_admin(), 'support is recognised');
+select t.ok(t.count('select * from public.support_companies()') = 2, 'support lists every company');
+select t.ok((select name from public.support_open((select v::uuid from ids where k='A'))) = 'Acme Co', 'support can open a company');
+select t.ok(public.my_role((select v::uuid from ids where k='A')) = 'admin', 'support acts as admin');
+select t.ok(t.count($$select * from public.docs where company_id = (select v::uuid from ids where k='A')$$) >= 3, 'support sees the company data, StockX settings included');
+select t.works($$select public.doc_patch((select v::uuid from ids where k='A'), 'items', 'i1', '{"qty":8}')$$, 'support can fix an item');
+select t.works($$insert into public.docs(company_id, coll, id, data) select v::uuid, 'settings', 'orders', '{"medium":5}' from ids where k = 'A'$$, 'support can fix settings');
+select t.ok(t.count('select * from public.members') >= 3, 'support can see the team');
+select t.fails($$select public.set_member_role((select v::uuid from ids where k='A'), '00000000-0000-0000-0000-00000000000a', 'staff')$$, 'support cannot demote the owner');
+select t.fails($$select public.create_invite((select v::uuid from ids where k='A'), 'admin')$$, 'support cannot invite admins');
+delete from public.companies where id = (select v::uuid from ids where k='A');
+select t.ok(t.count($$select * from public.companies where id = (select v::uuid from ids where k='A')$$) = 1, 'support cannot delete a company');
+select t.ok(t.count($$select * from public.members where user_id = auth.uid()$$) = 0, 'support does not appear in any team');
+select t.works($$insert into storage.objects(bucket_id, name) select 'photos', v || '/support.jpg' from ids where k = 'A'$$, 'support can upload photos');
+select set_config('realtime.topic', 'company:' || (select v from ids where k='A'), false);
+select t.ok(t.count('select * from realtime.messages') > 0, 'support can listen to live updates');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok(t.count($$select * from public.support_log where admin_email = 'support@stockroom.test'$$) = 1, 'owner can see that support opened their company');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.ok(t.count('select * from public.support_log') = 0, 'other companies cannot see that log');
+select t.ok(t.count('select * from public.docs') = 0, 'B still sees none of A after all this');
+
 -- Signed out.
 reset role; set role anon;
 select t.ok(t.count('select 1 from information_schema.role_table_grants where grantee = ''anon'' and table_schema = ''public''') = 0, 'anon has no table access');
@@ -133,6 +166,7 @@ select t.ok((select company_name from public.invite_info((select v from ids wher
 select t.ok((select not valid from public.invite_info((select v from ids where k='inv_staff'))), 'used invite shows as not valid');
 select t.ok(t.count($$select * from public.invite_info('bogus')$$) = 0, 'bogus invite shows nothing');
 select t.fails($$select * from public.invites$$, 'anon cannot list invites');
+select t.fails($$select * from public.support_companies()$$, 'anon cannot list companies');
 reset role;
 select case when ok then 'PASS ' else 'FAIL ' end || msg from t.results order by n;
 select count(*) filter (where not ok) || ' failed of ' || count(*) from t.results;

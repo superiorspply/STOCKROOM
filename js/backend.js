@@ -305,6 +305,11 @@ const css = `
 .acct .linkbox input{flex:1;min-width:0;padding:10px;border:1px solid var(--line);border-radius:12px;background:#0b0b0d;font-size:13px}
 .acct .logo-row{display:flex;align-items:center;gap:12px;margin:6px 0 12px}
 .acct .logo-row img{width:56px;height:56px;border-radius:14px;object-fit:cover;background:#000}
+#supportBar{position:sticky;top:0;z-index:8;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--accent,#e5192b);color:#fff;font-size:13px;font-weight:600;padding:calc(6px + env(safe-area-inset-top,0px)) 12px 6px}
+#supportBar button{background:rgba(0,0,0,.28);color:#fff;border:0;border-radius:999px;padding:4px 12px;font-weight:600;font-size:12.5px;cursor:pointer}
+#supportFrame{position:fixed;inset:0;border:3px solid var(--accent,#e5192b);pointer-events:none;z-index:70}
+#gate .gsearch{width:100%;padding:11px 13px;border:1px solid var(--line,#27272e);border-radius:14px;background:#0b0b0d;color:inherit;font-size:16px;margin:0 0 10px}
+#gate .gsec{font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#9a9aa6);margin:16px 0 8px}
 `;
 document.head.append(h('style', {}, css));
 
@@ -447,8 +452,36 @@ function showPicker(){
     S.memberships.map(mb => h('button', {class:'gco', type:'button', onclick:() => { lsSet(LS_COMPANY, mb.company.id); enter(mb); }},
       h('img', {src: mb.company.logo || monogram(mb.company.name), alt:''}),
       h('div', {}, h('b', {}, mb.company.name), h('small', {}, ROLES[mb.role].label)))),
+    S.isSupport ? h('button', {class:'btn', type:'button', style:'margin-top:8px', onclick:showSupportList}, 'Support: open any company') : null,
     h('button', {class:'glink', type:'button', onclick:() => showCreateCompany(false)}, '+ Add a company'),
     h('button', {class:'glink', type:'button', style:'display:block', onclick:signOut}, 'Sign out')));
+}
+async function showSupportList(){
+  const q = h('input', {class:'gsearch', type:'search', placeholder:'Search by company or owner email', autocomplete:'off', 'aria-label':'Search companies'});
+  const list = h('div', {}, h('p', {}, 'Loading companies…'));
+  gate(h('div', {class:'gcard'}, h('h2', {}, 'Support'),
+    h('p', {}, 'Open any company to help fix something. You will have admin powers there, and the owner can see that you opened it.'),
+    q, list,
+    h('button', {class:'glink', type:'button', onclick:() => S.memberships.length ? showPicker() : afterSignIn()}, 'Back')));
+  const {data, error} = await sb.rpc('support_companies');
+  if (error){ list.replaceChildren(h('p', {}, err(error))); return; }
+  const draw = () => {
+    const t = q.value.trim().toLowerCase();
+    const rows = (data || []).filter(c => !t || c.name.toLowerCase().includes(t) || String(c.owner_email || '').toLowerCase().includes(t));
+    list.replaceChildren(...(rows.length ? rows.map(c => h('button', {class:'gco', type:'button', onclick:() => enterSupport(c.id)},
+      h('img', {src: c.logo || monogram(c.name), alt:''}),
+      h('div', {}, h('b', {}, c.name), h('small', {}, (c.owner_email || 'no owner') + ' \u00b7 ' + c.members + ' ' + (c.members == 1 ? 'person' : 'people'))))) : [h('p', {}, 'No companies match.')]));
+  };
+  q.addEventListener('input', draw); draw();
+}
+async function enterSupport(cid){
+  if (S.company){ lsSet(LS_COMPANY, cid); location.reload(); return; }   // switching: reopen fresh, logged once on load
+  const {data, error} = await sb.rpc('support_open', {cid});
+  const c = data && data[0];
+  if (error || !c){ lsSet(LS_COMPANY, ''); gate(h('div', {class:'gcard'}, h('h2', {}, 'Could not open'), h('p', {}, err(error, 'That company no longer exists.')),
+    h('button', {class:'btn primary', type:'button', onclick:() => afterSignIn()}, 'Continue'))); return; }
+  lsSet(LS_COMPANY, c.id);
+  enter({role:'admin', company:{id:c.id, name:c.name, logo:c.logo}, support:true});
 }
 
 async function afterSignIn(){
@@ -473,14 +506,22 @@ async function afterSignIn(){
       h('button', {class:'btn primary', type:'button', onclick:() => afterSignIn()}, 'Try again')));
     return;
   }
-  if (!list.length){ showCreateCompany(true); return; }
-  const last = lsGet(LS_COMPANY), pick = list.find(x => x.company.id === last) || (list.length === 1 ? list[0] : null);
+  try { S.isSupport = (await sb.rpc('is_platform_admin')).data === true; } catch(e){ S.isSupport = false; }
+  const last = lsGet(LS_COMPANY);
+  if (S.isSupport && last && !list.some(x => x.company.id === last)){ await enterSupport(last); return; }
+  if (!list.length){ if (S.isSupport) showPicker(); else showCreateCompany(true); return; }
+  const pick = list.find(x => x.company.id === last) || (list.length === 1 && !S.isSupport ? list[0] : null);
   if (pick) enter(pick); else showPicker();
 }
 function enter(mb){
   if (S.company){ location.reload(); return; }   // switching company: start fresh
-  S.company = mb.company; S.role = mb.role;
+  S.company = mb.company; S.role = mb.role; S.support = !!mb.support;
   closeGate();
+  if (S.support){
+    document.body.prepend(h('div', {id:'supportBar', role:'status'}, 'Support mode \u00b7 ' + mb.company.name,
+      h('button', {type:'button', onclick:() => { lsSet(LS_COMPANY, ''); location.replace(siteUrl()); }}, 'Exit')));
+    document.body.append(h('div', {id:'supportFrame', 'aria-hidden':'true'}));
+  }
   applyBrand();
   resolveReady();
 }
@@ -604,6 +645,20 @@ async function openAccount(){
   }
   drawTeam().catch(() => say(m, 'Could not load the team.', 'bad'));
 
+  // Support history
+  if (isManager()){
+    const hist = h('div', {});
+    parts.push(hist);
+    sb.from('support_log').select('admin_email, opened_at').eq('company_id', S.company.id).order('opened_at', {ascending:false}).limit(5)
+      .then(({data}) => {
+        if (!data || !data.length) return;
+        hist.replaceChildren(h('div', {class:'sec'}, 'Support visits'),
+          h('p', {class:'hint', style:'margin:0 0 6px'}, 'Times Stockroom support opened ' + S.company.name + ' to help.'),
+          ...data.map(r => h('div', {class:'mem hist'}, h('span', {class:'who'}, r.admin_email || 'Support'),
+            h('span', {class:'hint', style:'margin:0'}, new Date(r.opened_at).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})))));
+      }, () => {});
+  }
+
   // Data import
   if (isManager()){
     const file = h('input', {type:'file', accept:'application/json,.json', style:'display:none'});
@@ -618,9 +673,9 @@ async function openAccount(){
   parts.push(h('div', {class:'sec'}, 'You'),
     h('p', {style:'margin:0 0 10px;font-size:14px'}, S.user.email || ''),
     h('div', {class:'foot'},
-      h('button', {class:'btn', type:'button', onclick:() => { close(); showSwitch(); }}, S.memberships.length > 1 ? 'Switch company' : 'Add a company'),
+      h('button', {class:'btn', type:'button', onclick:() => { close(); showSwitch(); }}, S.memberships.length > 1 || S.isSupport ? 'Switch company' : 'Add a company'),
       h('button', {class:'btn danger', type:'button', onclick:signOut}, 'Sign out')),
-    S.role !== 'owner' ? h('button', {class:'linkdanger', type:'button', style:'margin-top:10px', onclick: async () => {
+    S.role !== 'owner' && !S.support ? h('button', {class:'linkdanger', type:'button', style:'margin-top:10px', onclick: async () => {
       if (!confirm('Leave ' + S.company.name + '? You will lose access until someone invites you again.')) return;
       const {error} = await sb.rpc('remove_member', {cid:S.company.id, member:S.user.id});
       if (error){ say(m, err(error), 'bad'); return; }
@@ -630,7 +685,7 @@ async function openAccount(){
   body.append(...parts);
 }
 function showSwitch(){
-  if (S.memberships.length > 1) showPicker(); else showCreateCompany(false);
+  if (S.memberships.length > 1 || S.isSupport) showPicker(); else showCreateCompany(false);
 }
 
 /* ---------- import ---------- */

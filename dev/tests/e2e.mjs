@@ -2,11 +2,18 @@
 import {browser, context, page, SITE} from './helpers.mjs';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
+import {execFileSync} from 'node:child_process';
+
+// Support access is granted only from the database, like the real SQL-editor step.
+function makeSupport(email){
+  execFileSync('su', ['postgres', '-c', `psql -q -d ${process.env.DEV_DB || 'stockroom_dev'} -c "insert into public.platform_admins select id from auth.users where email = '${email}'"`]);
+}
 
 const results = [];
 const check = (ok, msg) => { results.push((ok ? 'PASS ' : 'FAIL ') + msg); };
 const errs = [];
 const run = Date.now().toString(36);
+const SUPPORT = `support-${run}@stockroom.test`;
 const OWNER = `owner-${run}@acme.test`, STAFF = `staff-${run}@acme.test`, OTHER = `other-${run}@bolt.test`, PW = 'correct-horse-9';
 
 // A tiny valid PNG (1x1 red) for photo uploads.
@@ -147,7 +154,36 @@ try {
   check(/^[0-9a-f-]{36}\/[a-z0-9]{20}\.jpg$/.test(impPhoto), 'imported photo is re-uploaded and linked');
   check((await A.locator('.top img.logo').getAttribute('src')).includes(Buffer.from('fake').toString('base64')), 'imported logo is applied');
 
-  // 10. Sign out returns to the sign-in screen; signing back in works.
+  // 10. Support can open any company, is clearly marked, and the owner can see the visit.
+  const ctxS = await context(b), SP = await page(ctxS, errs);
+  await signUp(SP, SUPPORT);
+  await SP.getByLabel('Company name').waitFor();
+  check(!(await SP.getByRole('button', {name:/^Support/}).count()), 'a normal account has no support option');
+  makeSupport(SUPPORT);
+  await SP.reload();
+  await SP.getByRole('button', {name:'Support: open any company'}).click();
+  await SP.getByRole('searchbox', {name:'Search companies'}).fill(OWNER);
+  await SP.locator('.gco', {hasText:OWNER}).click();
+  await SP.locator('#status.live').waitFor({timeout:10000});
+  await SP.screenshot({path:'/tmp/stockroom-support.png'});
+  check((await SP.locator('#supportBar').textContent()).includes('Support mode \u00b7 Acme Supply'), 'support mode bar names the company');
+  await SP.getByRole('tab', {name:'Inventory'}).click(); await SP.waitForTimeout(800);
+  check((await rowNames(SP)).some(t => t.includes('Imported Gadget')), 'support sees the company\u2019s items');
+  check((await SP.locator('#status').textContent()).includes('Saved online') && !(await SP.locator('#status').textContent()).includes('Staff'), 'support has admin powers');
+  await SP.reload(); await SP.locator('#status.live').waitFor({timeout:10000});
+  check(await SP.locator('#supportBar').count() === 1, 'support mode survives a reload');
+  await SP.locator('#supportBar button').click();
+  await SP.getByRole('heading', {name:'Choose a company'}).waitFor();
+  check(true, 'exit leaves support mode');
+  await A.reload(); await A.locator('#status.live').waitFor({timeout:10000});
+  await A.locator('#acctBtn').click();
+  await A.getByText('Support visits').waitFor({timeout:8000});
+  check((await A.locator('.acct').textContent()).includes(SUPPORT), 'owner sees the support visit');
+  check(!(await A.locator('.acct .mem:not(.hist) .who').allTextContents()).some(t => t.includes(SUPPORT)), 'support is not listed in the team');
+  await A.keyboard.press('Escape');
+  if (await A.locator('.backdrop').count()) await A.locator('.backdrop .icon-btn').first().click();
+
+  // 11. Sign out returns to the sign-in screen; signing back in works.
   await A.locator('#acctBtn').click();
   await A.getByRole('button', {name:'Sign out'}).click();
   await A.getByRole('tab', {name:'Sign in'}).waitFor({timeout:8000});

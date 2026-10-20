@@ -1,6 +1,6 @@
 # Putting Stockroom online
 
-Stockroom runs as a website at **https://superiorspply.github.io/STOCKROOM/**.
+Stockroom runs as a website at **https://stockroominc.com**. The domain is registered with Squarespace and points at GitHub Pages; the old address, https://superiorspply.github.io/STOCKROOM/, forwards there.
 
 - **GitHub Pages** hosts the site for free. Each time `main` changes, GitHub checks the code and republishes the site in about a minute.
 - **Supabase** stores the data, handles accounts and holds product photos. The free plan is enough to start.
@@ -21,8 +21,8 @@ You only do these steps once.
 ## 3. Set up sign-in
 
 1. Go to **Authentication → URL Configuration**:
-   - **Site URL:** `https://superiorspply.github.io/STOCKROOM/`
-   - Under **Redirect URLs**, click **Add URL** and add the same address.
+   - **Site URL:** `https://stockroominc.com/`
+   - Under **Redirect URLs**, click **Add URL** and add `https://stockroominc.com/` and `https://www.stockroominc.com/`.
 2. Go to **Authentication → Sign In / Providers → Email**.
    - The simplest option is to turn **Confirm email** off. People can then use the site as soon as they create an account.
    - If you leave it on, Supabase's built-in email sends only a few messages per hour. That's fine for a small team, but with many sign-ups you'll want to connect your own email sender under **Authentication → Emails → SMTP Settings**.
@@ -73,6 +73,16 @@ To open any company and help fix things, give your own account support access. D
 While you're inside someone else's company, a red **Support mode** bar shows at the top. You can fix things there like an admin, but you can't delete the company or change its owner. Each visit is logged, and the company's owner and admins can see it under **Support visits** in their account menu. You never appear in their team list.
 
 To remove support access later: `delete from platform_admins where user_id = (select id from auth.users where email = 'you@example.com');`
+
+## The domain (stockroominc.com)
+
+These steps are already done. They're here in case the domain ever needs setting up again.
+
+1. **Squarespace** (account.squarespace.com/domains → stockroominc.com → DNS → DNS Settings). Under **Custom records**, the domain has:
+   - four **A** records for host `@`: `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and `185.199.111.153`
+   - a **CNAME** record for host `www`, pointing to `superiorspply.github.io`
+2. **GitHub**: in the repo, **Settings → Pages → Custom domain** is set to `stockroominc.com`, with **Enforce HTTPS** ticked.
+3. **Supabase**: **Authentication → URL Configuration** uses the stockroominc.com addresses (see step 3 above).
 
 ## Other businesses
 

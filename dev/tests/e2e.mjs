@@ -172,6 +172,17 @@ try {
   check((await SP.locator('#status').textContent()).includes('Saved online') && !(await SP.locator('#status').textContent()).includes('Staff'), 'support has admin powers');
   await SP.reload(); await SP.locator('#status.live').waitFor({timeout:10000});
   check(await SP.locator('#supportBar').count() === 1, 'support mode survives a reload');
+  // Support backs up every company in one file.
+  await SP.locator('#acctBtn').click();
+  const [allDl] = await Promise.all([SP.waitForEvent('download', {timeout:30000}), SP.getByRole('button', {name:'Back up all companies'}).click()]);
+  const allFile = '/tmp/stockroom-all.json'; await allDl.saveAs(allFile);
+  const all = JSON.parse(fs.readFileSync(allFile, 'utf8'));
+  const acme = all.companies.find(x => x.team.some(m => m.email === OWNER));
+  check(all.format === 'stockroom-backup-all' && all.companies.length >= 2, 'all-companies backup includes every company');
+  check(acme && Object.values(acme.docs.items || {}).some(i => i.name === 'Imported Gadget'), 'all-companies backup has the company\u2019s items');
+  check(acme && !(acme.docs.settings && acme.docs.settings.stockx), 'all-companies backup leaves out StockX logins');
+  await SP.keyboard.press('Escape');
+  if (await SP.locator('.backdrop').count()) await SP.locator('.backdrop .icon-btn').first().click();
   await SP.locator('#supportBar button').click();
   await SP.getByRole('heading', {name:'Choose a company'}).waitFor();
   check(true, 'exit leaves support mode');
@@ -180,6 +191,17 @@ try {
   await A.getByText('Support visits').waitFor({timeout:8000});
   check((await A.locator('.acct').textContent()).includes(SUPPORT), 'owner sees the support visit');
   check(!(await A.locator('.acct .mem:not(.hist) .who').allTextContents()).some(t => t.includes(SUPPORT)), 'support is not listed in the team');
+  check(!(await A.getByRole('button', {name:'Back up all companies'}).count()), 'owners do not get the all-companies backup');
+  // The owner can restore their company from the all-companies file.
+  A.once('dialog', d => d.accept());
+  await A.locator('.acct input[type=file][accept*=json]').setInputFiles(allFile);
+  await A.waitForEvent('load', {timeout:15000});
+  await A.locator('#status.live').waitFor({timeout:10000});
+  await A.getByRole('tab', {name:'Inventory'}).click(); await A.waitForTimeout(600);
+  check((await rowNames(A)).some(t => t.includes('Imported Gadget')), 'restoring from the all-companies file works');
+  await A.getByRole('tab', {name:'Home'}).click(); await A.waitForTimeout(300);
+  check(!(await A.getByText('No backup yet').count()), 'home screen has no backup reminder');
+  await A.locator('#acctBtn').click();
   await A.keyboard.press('Escape');
   if (await A.locator('.backdrop').count()) await A.locator('.backdrop .icon-btn').first().click();
 

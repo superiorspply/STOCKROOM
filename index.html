@@ -227,8 +227,6 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .askcard{background:linear-gradient(180deg,var(--surface),#0e0e11);border:1px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px}
 .askcard .chips{flex-wrap:wrap;overflow:visible}.askcard .chip{white-space:normal;text-align:left}
 @media (max-width:520px){.status span{display:none}.status{padding:6px 9px}.top .linkbtn{padding:5px 11px}}
-.bkremind{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid var(--accent);background:rgba(229,25,43,.1);border-radius:18px;padding:12px 14px;margin:0 0 12px}
-.bkremind .bkt b{display:block;font-size:15px}.bkremind .bkt span{font-size:13px;color:var(--muted)}
 .clockwrap{padding-bottom:8px}
 .ckbig{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:46px;font-weight:700;text-align:center;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .ckgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
@@ -1723,12 +1721,6 @@ function renderHome(){
     const ch = prev>0 ? Math.round((total-prev)/prev*1000)/10 : null;
     delta.textContent = (up?'▲ ':'▼ ')+(ch===null ? (total>0 ? 'New' : '0%') : Math.abs(ch)+'%')+(span===1 ? ' vs yesterday' : ' vs previous '+span+' days'); };
   setDelta();
-  if (state.isAdmin && state.dl && (state.items.length || state.sales.length)){
-    const lb = lastBackup(); const days = lb ? Math.floor((Date.now()-new Date(lb).getTime())/864e5) : null;
-    if (days===null || days>=7) host.append(h('div',{class:'bkremind'},
-      h('div',{class:'bkt'}, h('b',{}, days===null ? 'No backup yet' : 'Last backup was '+days+' days ago'), h('span',{}, 'Save a copy of your inventory, customers and sales.')),
-      h('button',{class:'btn primary',type:'button',onclick:()=>backupAll(true)},'Back up now')));
-  }
   const grid = h('div',{class:'homegrid'}); const L = h('div',{class:'hcol'}), R = h('div',{class:'hcol'}); grid.append(L,R); host.append(grid);
   let cur = grid; const sec = (col,n)=>{ cur = h('div',{style:'order:'+n}); col.append(cur); };
   const put = {append:(...k)=>cur.append(...k)};

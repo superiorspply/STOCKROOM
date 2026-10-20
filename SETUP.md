@@ -1,0 +1,69 @@
+# Putting Stockroom online
+
+Stockroom runs as a website at **https://superiorspply.github.io/STOCKROOM/**.
+
+- **GitHub Pages** hosts the site for free. Each time `main` changes, GitHub checks the code and republishes the site in about a minute.
+- **Supabase** stores the data, handles accounts and holds product photos. The free plan is enough to start.
+
+You only do these steps once.
+
+## 1. Create the Supabase project
+
+1. Go to [supabase.com](https://supabase.com), sign up and click **New project**.
+2. Name it `stockroom`, choose a strong database password (save it somewhere safe) and pick the region closest to you. Click **Create new project** and wait about 2 minutes.
+
+## 2. Set up the database
+
+1. In the project, open **SQL Editor** in the left sidebar and click **New query**.
+2. Open [`supabase/migrations/20261020000000_stockroom.sql`](supabase/migrations/20261020000000_stockroom.sql) on GitHub, click the **Copy raw file** button and paste it into the editor.
+3. Click **Run**. You should see "Success. No rows returned".
+
+## 3. Set up sign-in
+
+1. Go to **Authentication → URL Configuration**:
+   - **Site URL:** `https://superiorspply.github.io/STOCKROOM/`
+   - Under **Redirect URLs**, click **Add URL** and add the same address.
+2. Go to **Authentication → Sign In / Providers → Email**.
+   - The simplest option is to turn **Confirm email** off. People can then use the site as soon as they create an account.
+   - If you leave it on, Supabase's built-in email sends only a few messages per hour. That's fine for a small team, but with many sign-ups you'll want to connect your own email sender under **Authentication → Emails → SMTP Settings**.
+
+## 4. Connect the site to Supabase
+
+1. Go to **Project Settings → API** (on some projects it's **Data API** and **API Keys**).
+2. Copy the **Project URL** and the **anon public** key.
+3. Send both to Claude and ask it to put them in `config.js`. Or edit [`config.js`](config.js) on GitHub yourself and paste them between the quotes.
+
+Both values are safe to publish. The anon key can only do what the database's security rules allow.
+
+## 5. Turn on GitHub Pages
+
+1. In the GitHub repo, go to **Settings → Pages**.
+2. Under **Build and deployment → Source**, choose **GitHub Actions**.
+3. Go to the **Actions** tab, click **Test and publish site**, then **Run workflow**. When it turns green, the site is live.
+
+## 6. Move your Superiorspply data in
+
+1. Open the site, click **Create account**, and create your company **Superiorspply**.
+2. Tap the **person icon** (top right) → **Import a backup file**, and choose `superiorspply-stockroom-import.json` (the file Claude gave you). This brings in your items, photos, customers, sales, invoices and logo.
+
+## 7. Invite your team
+
+Tap the **person icon → Invite someone**, pick a role, tap **Create invite link** and send the link. Each link works once and expires after 7 days.
+
+| Role   | Can do |
+|--------|--------|
+| Owner  | Everything, including the team and company settings |
+| Admin  | Everything except changing other admins |
+| Staff  | Sells, adds stock and clocks in. Cannot see costs or change settings |
+| Viewer | Looks only. Cannot change anything |
+
+## Other businesses
+
+Anyone can open the site, create an account and set up their own company. Each company's inventory, customers, sales and team are completely separate. Nobody can see another company's data.
+
+## Good to know
+
+- **Free plan pause:** Supabase pauses free projects after a week with no activity. If that happens, open the Supabase dashboard and click **Restore**. Upgrading to the Pro plan stops the pausing.
+- **Backups:** the app's **Back up now** button saves a file you can import again later. Supabase's paid plans also back up the database daily.
+- **Photo links:** product photos are viewable by anyone who has a photo's exact link. The links are random and impossible to guess, and nothing else is public.
+- **Ask and Live:** these were turned off for the website, since they need a paid Claude API key.

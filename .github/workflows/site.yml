@@ -63,6 +63,10 @@ jobs:
           mkdir _site
           cp index.html config.js manifest.webmanifest _site/
           cp -r js icons _site/
+          # iPhones also look for the home-screen icon at these fixed root names.
+          cp icons/apple-touch-icon.png _site/apple-touch-icon.png
+          cp icons/apple-touch-icon.png _site/apple-touch-icon-precomposed.png
+          cp icons/favicon-32.png _site/favicon.ico
           touch _site/.nojekyll
           # Stamp script and icon links with this commit so phones load each update right away
           # instead of reusing an older cached copy.

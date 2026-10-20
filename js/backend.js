@@ -669,6 +669,18 @@ async function openAccount(){
       h('button', {class:'btn', type:'button', onclick:() => file.click()}, 'Import a backup file'), file, status);
   }
 
+  // Support tools
+  if (S.isSupport){
+    const status = h('p', {class:'hint'});
+    const go = h('button', {class:'btn', type:'button', onclick: async () => {
+      go.disabled = true;
+      try { await backupEverything(status); } finally { go.disabled = false; }
+    }}, 'Back up all companies');
+    parts.push(h('div', {class:'sec'}, 'Support tools'),
+      h('p', {class:'hint', style:'margin:0 0 8px'}, 'One file with every company\u2019s items, customers, sales, invoices, employees, shifts, settings and team list. Photos stay stored online; the file keeps their links.'),
+      go, status);
+  }
+
   // Switch / you
   parts.push(h('div', {class:'sec'}, 'You'),
     h('p', {style:'margin:0 0 10px;font-size:14px'}, S.user.email || ''),
@@ -688,6 +700,38 @@ function showSwitch(){
   if (S.memberships.length > 1 || S.isSupport) showPicker(); else showCreateCompany(false);
 }
 
+/* ---------- support: back up every company ---------- */
+async function readCompanyDocs(cid){
+  const docs = {}, size = 1000;
+  for (let from = 0; ; from += size){
+    const {data:rows, error} = await sb.from('docs').select('coll,id,data').eq('company_id', cid).order('coll').order('id').range(from, from + size - 1);
+    if (error) throw error;
+    for (const r of rows){
+      if (r.coll === 'settings' && r.id === 'stockx') continue;   // third-party login tokens stay out of backup files
+      (docs[r.coll] = docs[r.coll] || {})[r.id] = r.data;
+    }
+    if (rows.length < size) return docs;
+  }
+}
+async function backupEverything(status){
+  try {
+    const {data:list, error} = await sb.rpc('support_companies');
+    if (error) throw error;
+    const out = {format:'stockroom-backup-all', version:1, exportedAt:new Date().toISOString(), companies:[]};
+    let n = 0, records = 0;
+    for (const c of list || []){
+      status.textContent = 'Reading ' + (++n) + ' of ' + list.length + ': ' + c.name + '\u2026';
+      const docs = await readCompanyDocs(c.id);
+      const {data:team} = await sb.from('members').select('email, role, created_at').eq('company_id', c.id);
+      records += Object.values(docs).reduce((k, o) => k + Object.keys(o).length, 0);
+      out.companies.push({company:{id:c.id, name:c.name, logo:c.logo, created_at:c.created_at, owner_email:c.owner_email}, team:team || [], docs});
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    await runtime.downloads().save({filename:'stockroom-all-companies-' + day + '.json', data:JSON.stringify(out)});
+    status.textContent = 'Saved ' + out.companies.length + ' companies (' + records + ' records).';
+  } catch(e){ status.textContent = 'Backup stopped: ' + err(e) + '. Try again.'; }
+}
+
 /* ---------- import ---------- */
 const COLLS = ['items','customers','sales','invoices','employees','shifts','settings'];
 function b64ToBlob(b64, type){
@@ -700,6 +744,12 @@ async function importFile(f, status){
   try { j = JSON.parse(await f.text()); } catch(e){ status.textContent = 'That file is not a Stockroom backup.'; return; }
   const docs = {};   // coll -> {id: data}
   let photos = {}, logo = null;
+  if (j && j.format === 'stockroom-backup-all' && Array.isArray(j.companies)){
+    // An all-companies backup: restore just this company's part of it.
+    const part = j.companies.find(x => x.company && x.company.id === S.company.id);
+    if (!part){ status.textContent = 'That file has no backup of ' + S.company.name + '.'; return; }
+    j = {format:'stockroom-import', docs:part.docs, company:part.company};
+  }
   if (j && j.format === 'stockroom-import' && j.docs){
     for (const c of Object.keys(j.docs)) if (COLLS.includes(c)) docs[c] = j.docs[c];
     photos = j.photos || {}; logo = (j.company && j.company.logo) || null;

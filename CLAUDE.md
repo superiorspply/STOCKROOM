@@ -14,12 +14,13 @@ A multi-company inventory, orders and sales web app. It's a static site on GitHu
 
   `STOCKROOM.brand()` and `STOCKROOM.logo()` give the current company's name and logo.
 - `config.js`: Supabase URL and anon key (public by design).
+- `icons/` and `manifest.webmanifest`: the app icon (`icons/icon.svg` is the source; the PNGs are rendered from it) and home-screen settings.
 - `supabase/migrations/`: the schema. All app data lives in `docs(company_id, coll, id, data jsonb)`.
   - Row-level security uses `my_role(company_id)`. Roles are `owner`, `admin`, `staff` and `viewer`.
   - `settings/*` documents are writable by owner/admin only. `settings/stockx` is readable by owner/admin only.
   - Changes are broadcast on the private Realtime topic `company:<id>`.
   - Photos are stored at `photos/<company id>/<random>.jpg`.
-- `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js` and `js/` to Pages on every push to `main`.
+- `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 
 ## Rules
 

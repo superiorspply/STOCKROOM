@@ -57,9 +57,26 @@ Tap the **person icon → Invite someone**, pick a role, tap **Create invite lin
 | Staff  | Sells, adds stock and clocks in. Cannot see costs or change settings |
 | Viewer | Looks only. Cannot change anything |
 
+## Support access (seeing every company)
+
+To open any company and help fix things, give your own account support access. Do this once, after you've signed up on the site:
+
+1. If you haven't already, run [`supabase/migrations/20261020010000_support_access.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261020010000_support_access.sql) in the **SQL Editor**: copy the whole page, paste it in, and click **Run**.
+2. In a new query, run this with your sign-in email:
+
+   ```sql
+   insert into platform_admins select id from auth.users where email = 'you@example.com';
+   ```
+
+3. Reload the site. The company picker now has **Support: open any company**. You can also get there from the person icon → **Switch company**.
+
+While you're inside someone else's company, a red **Support mode** bar shows at the top. You can fix things there like an admin, but you can't delete the company or change its owner. Each visit is logged, and the company's owner and admins can see it under **Support visits** in their account menu. You never appear in their team list.
+
+To remove support access later: `delete from platform_admins where user_id = (select id from auth.users where email = 'you@example.com');`
+
 ## Other businesses
 
-Anyone can open the site, create an account and set up their own company. Each company's inventory, customers, sales and team are completely separate. Nobody can see another company's data.
+Anyone can open the site, create an account and set up their own company. Each company's inventory, customers, sales and team are completely separate. Nobody can see another company's data except people you've given support access to (see above). It's worth saying so in any terms you show customers.
 
 ## Good to know
 

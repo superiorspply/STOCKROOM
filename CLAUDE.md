@@ -20,6 +20,7 @@ A multi-company inventory, orders and sales web app. It's a static site on GitHu
   - `settings/*` documents are writable by owner/admin only. `settings/stockx` is readable by owner/admin only.
   - Changes are broadcast on the private Realtime topic `company:<id>`.
   - Photos are stored at `photos/<company id>/<random>.jpg`.
+  - Support access: users in `platform_admins` (added only via the SQL editor) act as `admin` in any company through `my_role`. `support_open` logs each visit to `support_log`, which the company's owner and admins can read.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 
 ## Rules

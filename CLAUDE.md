@@ -1,6 +1,6 @@
 # Stockroom
 
-A multi-company inventory, orders and sales web app. It's a static site on GitHub Pages with Supabase behind it for Postgres, auth, storage and realtime. Setup steps for the owner are in `SETUP.md`.
+A multi-company inventory, orders and sales web app, live at https://stockroominc.com. It's a static site on GitHub Pages (custom domain set in the repo's Pages settings) with Supabase behind it for Postgres, auth, storage and realtime. Setup steps for the owner are in `SETUP.md`.
 
 ## Layout
 

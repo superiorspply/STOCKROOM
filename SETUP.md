@@ -74,6 +74,34 @@ While you're inside someone else's company, a red **Support mode** bar shows at 
 
 To remove support access later: `delete from platform_admins where user_id = (select id from auth.users where email = 'you@example.com');`
 
+## Bringing in stock from invoices and spreadsheets
+
+On the **Inventory** tab, owners and admins have a **Bring in stock** button with two options:
+
+- **Import a spreadsheet** (CSV or Excel) works straight away. You pick which columns hold the name, quantity and cost.
+- **Scan an invoice** (photo or PDF) uses Claude to read the invoice, so it needs the one-time setup below.
+
+Both lead to the same review screen. Lines that match an item you already have add to its stock and update its average cost. New items are created and labelled **Needs photo & price** until you add a photo and a selling price with **Edit**.
+
+### Setting up invoice scanning (once)
+
+1. **Get a Claude API key**
+   1. Sign up at [console.anthropic.com](https://console.anthropic.com).
+   2. Add a payment method under **Billing**.
+   3. Under **Limits**, set a monthly spend limit, for example $20.
+   4. Create a key under **API Keys** and copy it. It starts with `sk-ant-`. Keep it private, and never paste it into the site's code or config.js.
+2. **Run the database update.** In the Supabase **SQL Editor**, run [`supabase/migrations/20261021000000_invoice_scanning.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261021000000_invoice_scanning.sql): copy the whole page, paste it, and click **Run**.
+3. **Store the key in Supabase.** Go to **Edge Functions → Secrets** and add a secret named `ANTHROPIC_API_KEY` whose value is your key.
+4. **Add the scanning function**
+   1. Go to **Edge Functions → Deploy a new function → Via Editor**.
+   2. Name it exactly `scan-invoice`.
+   3. Replace the sample code with everything in [`supabase/functions/scan-invoice/index.ts`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/functions/scan-invoice/index.ts).
+   4. Click **Deploy**.
+   5. In the function's **Details**, turn **Verify JWT** off. The function checks sign-in itself through the database.
+5. **Turn scanning on for a company.** As support, open the company, then go to the person icon → **Support tools**. Tick **Invoice scanning**, set the scans per month, and click **Save**. Scanning is off for every company until you do this, so you decide who can use it.
+
+**Cost:** each scan is one request to Claude Opus 5.5 and usually costs a few cents, depending on the invoice's length. Scans that fail don't count toward the monthly limit. Anthropic's spend limit from step 1 is your hard cap.
+
 ## The domain (stockroominc.com)
 
 These steps are already done. They're here in case the domain ever needs setting up again.

@@ -280,8 +280,8 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .ihb{display:block;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:27px;font-weight:700;letter-spacing:-.01em}
 .invrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:11px 0;font-size:14px;cursor:pointer;text-align:left}
 .invrow span:first-child{flex:1}
-.toolrow{display:flex;gap:8px;margin:-4px 0 12px}
-.toolrow .btn{flex:1;padding:11px 12px;border-radius:14px}
+.toolrow{display:flex;flex-wrap:wrap;gap:8px;margin:-4px 0 12px}
+.toolrow .btn{flex:1 1 28%;padding:11px 12px;border-radius:14px}
 .prow{display:flex;gap:10px;align-items:center;padding:11px 13px}
 .prow .main{flex:1;min-width:0}
 .pprice{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:18px;white-space:nowrap;text-align:right}
@@ -2632,6 +2632,212 @@ function openAddStock(id){
   openSheet('Add stock', form);
 }
 
+/* ---------- bring in stock from an invoice or spreadsheet ---------- */
+const needsSetup = i => i.source==='invoice' && (!i.photoId || !(i.price>0));
+const setupLabel = i => !i.photoId && !(i.price>0) ? 'Needs photo & price' : !i.photoId ? 'Needs photo' : 'Needs price';
+const avgCost = (cur, n, c)=>{ const onHand = Math.max(0, cur.qty||0); const t = onHand + n; return t>0 ? round4((onHand*(cur.cost||0) + n*c)/t) : round4(c); };
+const words = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(w=>w.length>1);
+function matchItem(name, code){
+  const c = cleanSku(code||'');
+  if (c){ const hit = state.items.find(i=>cleanSku(i.sku)===c || (i.styleCode && cleanSku(i.styleCode)===c)); if (hit) return hit; }
+  const a = new Set(words(name)); if (!a.size) return null;
+  let best = null, score = 0;
+  for (const it of state.items){
+    const b = new Set(words(it.name)); if (!b.size) continue;
+    let both = 0; a.forEach(w=>{ if (b.has(w)) both++; });
+    const s = both / (a.size + b.size - both);
+    if (s > score){ score = s; best = it; }
+  }
+  return score >= 0.5 ? best : null;
+}
+function openBringIn(){
+  const scanStatus = h('p',{class:'hint',style:'margin:0 0 10px'},'Checking invoice scanning…');
+  const scanFile = h('input',{type:'file',accept:'image/*,application/pdf',style:'display:none'});
+  const scanBtn = h('button',{class:'btn primary',type:'button',disabled:true,onclick:()=>scanFile.click()},'Scan an invoice');
+  const sheetFile = h('input',{type:'file',accept:'.csv,.xlsx,.xls,.tsv,text/csv',style:'display:none'});
+  const sheetStatus = h('p',{class:'hint',style:'margin:0 0 10px'});
+  let api = null;
+  window.claude.use('invoices').then(async a=>{
+    api = a; const s = await a.status();
+    if (!s.enabled){ scanStatus.textContent = 'Invoice scanning is not turned on for '+BRAND()+' yet. Ask Stockroom support to turn it on.'; return; }
+    scanStatus.textContent = s.used+' of '+s.limit+' scans used this month. Photos and PDFs work.';
+    scanBtn.disabled = s.used >= s.limit;
+  }).catch(()=>{ scanStatus.textContent = 'Invoice scanning is not available right now.'; });
+  scanFile.addEventListener('change', async ()=>{
+    const f = scanFile.files && scanFile.files[0]; scanFile.value = ''; if (!f || !api) return;
+    scanBtn.disabled = true; scanStatus.textContent = 'Reading the invoice. This can take up to a minute…';
+    try { const inv = await api.scan(f); openInvoiceReview(inv, 'invoice'); }
+    catch(e){ scanStatus.textContent = (e && e.message) || 'Could not read that invoice.'; scanBtn.disabled = false; }
+  });
+  sheetFile.addEventListener('change', async ()=>{
+    const f = sheetFile.files && sheetFile.files[0]; sheetFile.value = ''; if (!f) return;
+    sheetStatus.textContent = 'Opening the file…';
+    try {
+      const rows = (await readSheetFile(f)).filter(r=>r.some(c=>String(c).trim()!==''));
+      if (rows.length < 2){ sheetStatus.textContent = 'That file has no rows to import.'; return; }
+      openColumnMap(rows, f.name);
+    } catch(e){ sheetStatus.textContent = (e && e.message) || 'Could not open that file. Save it as CSV or .xlsx and try again.'; }
+  });
+  openSheet('Bring in stock', h('div',{},
+    h('div',{class:'bkp'}, h('b',{},'Scan an invoice'),
+      h('p',{style:'margin:4px 0 8px;font-size:13px;color:var(--muted)'},'Take a photo of a supplier invoice or pick its PDF. Claude reads the lines, then you check them before anything is saved.'),
+      scanStatus, scanBtn, scanFile),
+    h('div',{class:'bkp',style:'margin-top:10px'}, h('b',{},'Import a spreadsheet'),
+      h('p',{style:'margin:4px 0 8px;font-size:13px;color:var(--muted)'},'A CSV or Excel file from your supplier. You pick which columns hold the name, quantity and cost.'),
+      sheetStatus, h('button',{class:'btn',type:'button',onclick:()=>sheetFile.click()},'Choose a file'), sheetFile)), {noFocus:true});
+}
+function parseCsv(text){
+  const first = text.split(/\r?\n/)[0] || '';
+  const delim = [',',';','\t'].sort((a,b)=>first.split(b).length - first.split(a).length)[0];
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (q){ if (ch==='"'){ if (text[i+1]==='"'){ cell += '"'; i++; } else q = false; } else cell += ch; continue; }
+    if (ch==='"') q = true;
+    else if (ch===delim){ row.push(cell); cell = ''; }
+    else if (ch==='\n' || ch==='\r'){ if (ch==='\r' && text[i+1]==='\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell!=='' || row.length){ row.push(cell); rows.push(row); }
+  return rows.map(r=>r.map(c=>c.trim()));
+}
+function loadXlsx(){
+  return new Promise((res, rej)=>{
+    if (window.XLSX) return res();
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = ()=>res(); s.onerror = ()=>rej(new Error('Could not load the Excel reader. Check your connection, or save the file as CSV.'));
+    document.head.append(s);
+  });
+}
+async function readSheetFile(f){
+  if (/\.xlsx?$/i.test(f.name)){
+    await loadXlsx();
+    const wb = window.XLSX.read(await f.arrayBuffer(), {type:'array'});
+    return window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''}).map(r=>r.map(c=>String(c).trim()));
+  }
+  return parseCsv(await f.text());
+}
+function openColumnMap(rows, fname){
+  const looks = {
+    name:/desc|product|item name|^item$|^name$|title|article/i,
+    qty:/qty|quant|units?$|count|pcs|ordered|shipped|received/i,
+    cost:/unit.?(cost|price)|^cost|^price|each|rate|wholesale/i,
+    total:/total|amount|ext/i,
+    code:/sku|code|item.?(#|no|num)|part|upc|style|model|ref/i
+  };
+  let hi = 0;
+  for (let r = 0; r < Math.min(10, rows.length); r++){ const t = rows[r].join(' '); if (looks.name.test(t) && looks.qty.test(t)){ hi = r; break; } }
+  const head = rows[hi].map((c,i)=>c || 'Column '+(i+1));
+  const data = rows.slice(hi+1);
+  const guess = (k, avoid)=>{ const i = head.findIndex((c,j)=>looks[k].test(c) && !(avoid||[]).includes(j) && !(k==='cost' && looks.total.test(c))); return i; };
+  const pick = {}; pick.name = guess('name'); pick.qty = guess('qty',[pick.name]); pick.cost = guess('cost',[pick.name,pick.qty]); pick.total = guess('total',[pick.name,pick.qty,pick.cost]); pick.code = guess('code',[pick.name,pick.qty,pick.cost,pick.total]);
+  const sel = k=>{ const s = h('select',{}, h('option',{value:'-1'},'(none)'), head.map((c,i)=>h('option',{value:String(i)}, c))); s.value = String(pick[k]); return s; };
+  const S = {name:sel('name'), qty:sel('qty'), cost:sel('cost'), total:sel('total'), code:sel('code')};
+  const err = h('p',{class:'err'});
+  const preview = h('div',{class:'hint',style:'margin:0 0 12px'});
+  const build = ()=>{
+    const col = k=>int(S[k].value);
+    const lines = [];
+    for (const r of data){
+      const name = col('name')>=0 ? String(r[col('name')]||'').trim() : '';
+      const qty = col('qty')>=0 ? num(r[col('qty')]) : 0;
+      if (!name || !(qty>0) || /^(sub)?total|^tax|^shipping/i.test(name)) continue;
+      let cost = col('cost')>=0 ? num(r[col('cost')]) : 0;
+      if (!(cost>0) && col('total')>=0 && qty>0) cost = round4(num(r[col('total')])/qty);
+      lines.push({name, code: col('code')>=0 ? String(r[col('code')]||'').trim() : '', quantity:qty, unit_cost:cost, line_total:round2(qty*cost), note:''});
+    }
+    return lines;
+  };
+  const showPrev = ()=>{ const l = build(); preview.textContent = l.length ? l.length+' product lines found. First: '+l[0].name+' × '+fmtN(l[0].quantity)+(l[0].unit_cost ? ' @ '+money(l[0].unit_cost) : '') : 'No product lines found with these columns yet.'; };
+  Object.values(S).forEach(s=>s.addEventListener('change', showPrev)); showPrev();
+  openSheet('Match the columns', h('div',{},
+    h('p',{class:'hint',style:'margin:0 0 12px'}, fname+' · '+data.length+' rows. Pick which column holds each detail.'),
+    field('Product name', S.name), field('Quantity', S.qty), field('Cost each', S.cost, 'Leave as (none) if the file only has line totals.'), field('Line total', S.total), field('Supplier code or SKU', S.code, 'Optional. Used to match items you already have.'),
+    preview, err,
+    h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:openBringIn},'Back'), h('button',{class:'btn primary',type:'button',onclick:()=>{ const l = build(); if (!l.length){ err.textContent = 'Pick the name and quantity columns first.'; return; } openInvoiceReview({supplier:'', invoice_number:'', invoice_date:'', lines:l, warning:''}, 'spreadsheet'); }},'Review lines'))), {noFocus:true});
+}
+function openInvoiceReview(inv, source){
+  const NEW_CATS = CATS.filter(([k])=>k==='squishy' || k==='other');
+  const choices = state.items.filter(i=>!isSized(i)).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  const lines = (inv.lines||[]).map(l=>{
+    const m = matchItem(l.name, l.code);
+    const sized = m && isSized(m);
+    return {include: !sized && num(l.quantity)>0, name:String(l.name||'').trim(), code:String(l.code||'').trim(), qty:Math.round(num(l.quantity)), cost:round4(num(l.unit_cost)), target: m && !sized ? m.id : 'new', cat:'other',
+      note:[l.note, sized ? 'Matches '+m.sku+' ('+m.name+'), which tracks sizes. Add that stock from the item’s + Stock button instead.' : ''].filter(Boolean).join(' ')};
+  });
+  const list = h('div',{});
+  const sum = h('p',{style:'margin:0 0 10px;font-weight:600'});
+  const err = h('p',{class:'err'});
+  const go = h('button',{class:'btn primary',type:'button'},'Add to inventory');
+  const redrawSum = ()=>{
+    const on = lines.filter(l=>l.include && l.qty>0 && l.name);
+    const n = on.filter(l=>l.target==='new').length;
+    sum.textContent = on.length+' of '+lines.length+' lines · '+fmtN(on.reduce((a,l)=>a+l.qty,0))+' units · '+money(on.reduce((a,l)=>a+l.qty*l.cost,0))+(n ? ' · '+n+' new item'+(n>1?'s':'') : '');
+    go.disabled = !on.length;
+  };
+  const draw = ()=>{
+    list.replaceChildren(...lines.map(l=>{
+      const inc = h('input',{type:'checkbox'}); inc.checked = l.include;
+      const nm = h('input',{type:'text',value:l.name,'aria-label':'Product name'});
+      const qty = h('input',{type:'number',min:'0',step:'1',inputmode:'numeric',value:String(l.qty),'aria-label':'Quantity'});
+      const cost = h('input',{type:'number',min:'0',step:'any',inputmode:'decimal',value:l.cost ? String(l.cost) : '','aria-label':'Cost each'});
+      const tgt = h('select',{'aria-label':'Add to'}, h('option',{value:'new'},'New item'), choices.map(i=>h('option',{value:i.id}, i.sku+' · '+i.name+' ('+fmtN(i.qty||0)+' on hand)')));
+      tgt.value = l.target;
+      const cat = h('select',{'aria-label':'Category'}, NEW_CATS.map(([k,lab])=>h('option',{value:k},lab))); cat.value = l.cat;
+      const catField = field('Category', cat); catField.hidden = l.target!=='new';
+      inc.addEventListener('change', ()=>{ l.include = inc.checked; redrawSum(); });
+      nm.addEventListener('input', ()=>{ l.name = nm.value.trim(); redrawSum(); });
+      qty.addEventListener('input', ()=>{ l.qty = Math.max(0, int(qty.value)); redrawSum(); });
+      cost.addEventListener('input', ()=>{ l.cost = round4(num(cost.value)); redrawSum(); });
+      tgt.addEventListener('change', ()=>{ l.target = tgt.value; catField.hidden = l.target!=='new'; redrawSum(); });
+      cat.addEventListener('change', ()=>{ l.cat = cat.value; });
+      return h('div',{class:'cline'},
+        h('label',{class:'chk',style:'margin:0 0 8px'}, inc, h('span',{}, 'Include', l.code ? h('span',{class:'hint',style:'display:inline;margin-left:6px'}, 'code '+l.code) : null)),
+        field('Product', nm), h('div',{class:'grid2'}, field('Quantity', qty), field('Cost each ($)', cost)),
+        field('Add to', tgt), catField,
+        l.note ? h('p',{class:'hint',style:'margin:0;color:var(--q)'}, l.note) : null);
+    }));
+    redrawSum();
+  };
+  go.addEventListener('click', async ()=>{
+    const on = lines.filter(l=>l.include && l.qty>0 && l.name);
+    if (!on.length) return;
+    go.disabled = true; err.textContent = '';
+    const used = new Set(state.items.map(i=>i.sku));
+    let n = int((/-(\d+)$/.exec(nextSku('SS'))||[])[1]) || 1;
+    const freshSku = ()=>{ let s; do { s = 'SS-'+String(n++).padStart(4,'0'); } while (used.has(s)); used.add(s); return s; };
+    const running = {};
+    let done = 0;
+    for (const l of on){
+      go.textContent = 'Saving '+(done+1)+' of '+on.length+'…';
+      let ok;
+      if (l.target==='new'){
+        const t = nowIso();
+        ok = await write(()=>state.db.collection('items').doc().set({sku:freshSku(), name:l.name, category:catLabel(l.cat), qty:l.qty, cost:l.cost, price:0, priceMedium:null, priceLarge:null, tiers:[], caseQty:null, location:'', notes:[inv.supplier ? 'From '+inv.supplier : '', l.code ? 'Supplier code '+l.code : ''].filter(Boolean).join(' · '), queued:false, photoId:'', sizes:null, sizeType:null, styleCode:'', source:'invoice', createdAt:t, updatedAt:t}));
+      } else {
+        const base = running[l.target] || state.items.find(i=>i.id===l.target);
+        if (!base){ err.textContent = 'One of the matched items no longer exists. Pick it again.'; break; }
+        const upd = {qty:(base.qty||0)+l.qty, updatedAt:nowIso()};
+        if (l.cost>0) upd.cost = avgCost(base, l.qty, l.cost);
+        ok = await write(()=>state.db.doc('items/'+l.target).update(upd));
+        if (ok) running[l.target] = Object.assign({}, base, upd);
+      }
+      if (!ok){ err.textContent = 'Stopped after '+done+' of '+on.length+' lines. The saved lines are in your inventory; untick them before trying again.'; break; }
+      l.include = false; done++;
+    }
+    go.textContent = 'Add to inventory';
+    if (done===on.length){ closeSheet(); toast('Added '+done+' line'+(done>1?'s':'')+' to inventory'); state.tab = 'inventory'; renderTab(); }
+    else { draw(); go.disabled = false; }
+  });
+  draw();
+  const head = [inv.supplier, inv.invoice_number ? '#'+inv.invoice_number : '', inv.invoice_date].filter(Boolean).join(' · ');
+  openSheet(source==='invoice' ? 'Check the invoice' : 'Check the lines', h('div',{},
+    head ? h('p',{style:'margin:0 0 4px;font-weight:600'}, head) : null,
+    inv.warning ? h('p',{class:'hint',style:'margin:0 0 8px;color:var(--q)'}, inv.warning) : null,
+    h('p',{class:'hint',style:'margin:0 0 12px'}, lines.length ? 'Check each line. Matched lines add to the item you already have and update its average cost. New items are marked Needs photo & price so you can finish them later.' : 'No product lines were found.'),
+    list, h('div',{class:'stickyfoot'}, sum, err, h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:closeSheet},'Cancel'), go))), {noFocus:true});
+}
+
 /* ---------- sell ---------- */
 function sortedCustomers(){ return state.customers.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')); }
 function openSell(id){
@@ -2840,7 +3046,7 @@ function itemRow(i){
       h('div',{class:'main'},
         h('div',{class:'name'}, i.name),
         h('div',{class:'meta'}, h('span',{class:'sku'}, i.sku), i.location ? h('span',{}, 'Bin '+i.location) : null, h('span',{}, catLabel(i.category))),
-        h('div',{class:'meta'}, badge, (showCost() && i.cost) ? h('span',{}, 'cost '+money(i.cost)) : null),
+        h('div',{class:'meta'}, badge, needsSetup(i) ? h('span',{class:'badge b-q'}, setupLabel(i)) : null, (showCost() && i.cost) ? h('span',{}, 'cost '+money(i.cost)) : null),
         i.notes ? h('div',{class:'meta'}, i.notes) : null,
         sizeLine(i)),
       h('div',{class:'qtile'}, h('b',{style:'font-size:'+(fmtN(i.qty).length>=7?14:fmtN(i.qty).length>=5?18:26)+'px'}, fmtN(i.qty)), h('span',{},'on hand'))),
@@ -2865,6 +3071,7 @@ function renderInventory(){
   host.append(h('div',{class:'sum'}, stat(String(cnt.all),'SKUs'), stat(String(units),'units on hand'), stat(money(value),'at Small price')));
   host.append(h('div',{class:'chips'}, [['all','All categories',items.length]].concat(CATS.map(([k,l])=>[k,l,items.filter(i=>catKey(i.category)===k).length])).map(([k,l,n])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.cat===k),onclick:()=>{ state.cat = k; renderList(); }}, l+' '+n))));
   const chips = [['all','All',cnt.all],['in','In stock',cnt.in],['q','Queued',cnt.q],['out','Sold out',cnt.out]];
+  const nSetup = items.filter(needsSetup).length; if (nSetup) chips.push(['setup','Needs photo & price',nSetup]);
   host.append(h('div',{class:'chips'}, chips.map(([k,l,n])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.filter===k),onclick:()=>{ state.filter = k; renderList(); }}, l+' '+n))));
   if (items.some(isSneaker)){
     const sn = items.filter(isSneaker); const tcount = k=>sn.filter(i=>(SIZE_SETS[i.sizeType] ? i.sizeType : 'mens')===k).length;
@@ -2881,6 +3088,7 @@ function renderInventory(){
     if (state.filter==='in' && !(i.qty>0)) return false;
     if (state.filter==='q' && !(i.queued && i.qty>0)) return false;
     if (state.filter==='out' && i.qty>0) return false;
+    if (state.filter==='setup' && !needsSetup(i)) return false;
     if (state.stype!=='all'){ if (!isSneaker(i) || (SIZE_SETS[i.sizeType] ? i.sizeType : 'mens')!==state.stype) return false; if (state.ssize!=='all' && !(sizeMapOf(i)[state.ssize]>0)) return false; }
     return !q || [i.sku,i.name,i.location,i.category,catLabel(i.category),i.notes].some(v=>String(v||'').toLowerCase().includes(q));
   }).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
@@ -3049,7 +3257,7 @@ function renderTab(){
   const view = $('#view'); view.replaceChildren();
   if (state.tab==='inventory'){
     view.append(h('div',{class:'searchrow'}, h('input',{class:'search',type:'search',placeholder:'Search or scan a SKU',value:state.q,autocomplete:'off',autocapitalize:'off',autocorrect:'off','aria-label':'Search inventory',oninput:e=>{ state.q = e.target.value; renderList(); }}), h('button',{class:'btn primary',type:'button',onclick:openScanner,'aria-label':'Scan a barcode'},'Scan')));
-    view.append(h('div',{class:'toolrow'}, state.isAdmin ? h('button',{class:'btn'+(state.hideCost?' primary':''),type:'button','aria-pressed':String(state.hideCost),onclick:()=>{ state.hideCost = !state.hideCost; try { localStorage.setItem('ss_hidecost', state.hideCost ? '1' : '0'); } catch(e){} renderTab(); }}, state.hideCost ? 'Costs hidden · Show' : 'Hide costs') : null, h('button',{class:'btn',type:'button',onclick:openPriceList},'Price list'), h('button',{class:'btn',type:'button',onclick:openLabelsSheet},'Print labels'), h('button',{class:'btn',type:'button',onclick:openDeadStock},'Dead stock')));
+    view.append(h('div',{class:'toolrow'}, state.isAdmin ? h('button',{class:'btn'+(state.hideCost?' primary':''),type:'button','aria-pressed':String(state.hideCost),onclick:()=>{ state.hideCost = !state.hideCost; try { localStorage.setItem('ss_hidecost', state.hideCost ? '1' : '0'); } catch(e){} renderTab(); }}, state.hideCost ? 'Costs hidden · Show' : 'Hide costs') : null, h('button',{class:'btn',type:'button',onclick:openPriceList},'Price list'), h('button',{class:'btn',type:'button',onclick:openLabelsSheet},'Print labels'), h('button',{class:'btn',type:'button',onclick:openDeadStock},'Dead stock'), state.isAdmin ? h('button',{class:'btn',type:'button',onclick:openBringIn},'Bring in stock') : null));
   } else if (state.tab==='customers'){
     view.append(h('div',{class:'searchrow'}, h('input',{class:'search',type:'search',placeholder:'Search customers',value:state.cq,autocomplete:'off','aria-label':'Search customers',oninput:e=>{ state.cq = e.target.value; renderList(); }}), h('select',{class:'sortsel','aria-label':'Sort customers',onchange:e=>{ state.csort = e.target.value; renderList(); }}, [['name','Name A–Z'],['spent','Most spent'],['recent','Latest order']].map(([v,l])=>{ const o = h('option',{value:v},l); if (state.csort===v) o.selected = true; return o; }))));
   }

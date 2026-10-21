@@ -14,6 +14,8 @@ export async function context(b, opts){
     r.fulfill({body:fs.readFileSync(path.join(NM, '@supabase/supabase-js/dist/umd/supabase.js')), contentType:'text/javascript'}));
   await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/jspdf/**', r =>
     r.fulfill({body:fs.readFileSync(path.join(NM, 'jspdf/dist/jspdf.umd.min.js')), contentType:'text/javascript'}));
+  await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/xlsx/**', r =>
+    r.fulfill({body:fs.readFileSync(path.join(NM, 'xlsx/dist/xlsx.full.min.js')), contentType:'text/javascript'}));
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({body:'', contentType:'text/css'}));
   return ctx;
 }

@@ -249,6 +249,25 @@ const runtime = {
       }
     };
   },
+  invoices(){
+    return {
+      async status(){
+        const {data, error} = await sb.rpc('scan_status', {cid:S.company.id});
+        const r = !error && data && data[0];
+        return r ? {enabled:r.enabled, limit:r.monthly_limit, used:r.used} : {enabled:false, limit:0, used:0};
+      },
+      async scan(file){
+        const body = Object.assign({company_id:S.company.id}, await invoiceFile(file));
+        const {data, error} = await sb.functions.invoke('scan-invoice', {body});
+        if (error){
+          let msg = '';
+          try { msg = (await error.context.json()).error; } catch(e){}
+          throw new Error(msg || (/Failed to send|fetch/i.test(error.message) ? 'Invoice scanning is not set up yet, or you are offline.' : error.message));
+        }
+        return data.invoice;
+      }
+    };
+  },
   assets(){
     return {
       async upload(blob, opts){
@@ -676,7 +695,22 @@ async function openAccount(){
       go.disabled = true;
       try { await backupEverything(status); } finally { go.disabled = false; }
     }}, 'Back up all companies');
-    parts.push(h('div', {class:'sec'}, 'Support tools'),
+    const scanBox = h('div', {});
+    sb.rpc('scan_status', {cid:S.company.id}).then(({data, error}) => {
+      if (error || !data || !data[0]){ scanBox.replaceChildren(h('p', {class:'hint'}, 'Invoice scanning is not set up in the database yet.')); return; }
+      const r = data[0];
+      const on = h('input', {type:'checkbox'}); on.checked = r.enabled;
+      const lim = h('input', {type:'number', min:'0', max:'10000', step:'1', value:String(r.monthly_limit), style:'width:90px', 'aria-label':'Scans per month'});
+      const msg = h('span', {class:'hint', style:'margin:0'});
+      scanBox.replaceChildren(
+        h('label', {class:'chk'}, on, h('span', {}, 'Invoice scanning for ' + S.company.name + ' (' + r.used + ' used this month)')),
+        h('div', {class:'linkbox'}, lim, h('span', {class:'hint', style:'margin:auto 0'}, 'scans per month'),
+          h('button', {class:'btn', type:'button', onclick: async () => {
+            const {error:e2} = await sb.rpc('support_set_scan', {cid:S.company.id, on_off:on.checked, scan_limit:Math.max(0, parseInt(lim.value, 10) || 0)});
+            msg.textContent = e2 ? err(e2) : 'Saved';
+          }}, 'Save')), msg);
+    });
+    parts.push(h('div', {class:'sec'}, 'Support tools'), scanBox,
       h('p', {class:'hint', style:'margin:0 0 8px'}, 'One file with every company\u2019s items, customers, sales, invoices, employees, shifts, settings and team list. Photos stay stored online; the file keeps their links.'),
       go, status);
   }
@@ -698,6 +732,20 @@ async function openAccount(){
 }
 function showSwitch(){
   if (S.memberships.length > 1 || S.isSupport) showPicker(); else showCreateCompany(false);
+}
+
+/* ---------- invoice files ---------- */
+// Photos are shrunk to a sensible size (and turned into JPEG, which also handles iPhone HEIC photos); PDFs go as they are.
+async function invoiceFile(file){
+  const toB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)){
+    if (file.size > 10 * 1024 * 1024) throw new Error('That PDF is over 10 MB. Scan fewer pages at a time.');
+    return {media_type:'application/pdf', data:await toB64(file)};
+  }
+  let dataUrl;
+  try { dataUrl = await resizeImage(file, 2000); }
+  catch(e){ throw new Error('That file could not be opened as a photo. Use a JPEG or PNG photo, or a PDF.'); }
+  return {media_type:'image/jpeg', data:dataUrl.split(',')[1]};
 }
 
 /* ---------- support: back up every company ---------- */

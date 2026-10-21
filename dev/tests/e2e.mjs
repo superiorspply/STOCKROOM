@@ -3,6 +3,8 @@ import {browser, context, page, SITE} from './helpers.mjs';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+const XLSX = createRequire(import.meta.url)('xlsx');
 
 // Support access is granted only from the database, like the real SQL-editor step.
 function makeSupport(email){
@@ -120,6 +122,8 @@ try {
     try { await db.collection('customers').doc().set({name:'Walk-in'}); return true; } catch(e){ return String(e); }
   });
   check(staffWrite === true, 'staff can add a customer');
+  await B.getByRole('tab', {name:'Inventory'}).click();
+  check(!(await B.getByRole('button', {name:'Bring in stock'}).count()), 'staff do not get Bring in stock');
 
   // 8. A different company sees none of Acme's data.
   const ctxC = await context(b), C = await page(ctxC, errs);
@@ -172,6 +176,17 @@ try {
   check((await SP.locator('#status').textContent()).includes('Saved online') && !(await SP.locator('#status').textContent()).includes('Staff'), 'support has admin powers');
   await SP.reload(); await SP.locator('#status.live').waitFor({timeout:10000});
   check(await SP.locator('#supportBar').count() === 1, 'support mode survives a reload');
+  // Support switches invoice scanning on for this company.
+  await SP.locator('#acctBtn').click();
+  await SP.getByText(/Invoice scanning for Acme Supply/).waitFor({timeout:8000});
+  await SP.locator('.acct label.chk input[type=checkbox]').check();
+  await SP.getByRole('spinbutton', {name:'Scans per month'}).fill('3');
+  await SP.locator('.acct .linkbox').filter({hasText:'scans per month'}).getByRole('button', {name:'Save'}).click();
+  await SP.getByText('Saved', {exact:true}).waitFor();
+  check(true, 'support can switch scanning on');
+  await SP.keyboard.press('Escape');
+  if (await SP.locator('.backdrop').count()) await SP.locator('.backdrop .icon-btn').first().click();
+
   // Support backs up every company in one file.
   await SP.locator('#acctBtn').click();
   const [allDl] = await Promise.all([SP.waitForEvent('download', {timeout:30000}), SP.getByRole('button', {name:'Back up all companies'}).click()]);
@@ -205,7 +220,62 @@ try {
   await A.keyboard.press('Escape');
   if (await A.locator('.backdrop').count()) await A.locator('.backdrop .icon-btn').first().click();
 
-  // 11. Sign out returns to the sign-in screen; signing back in works.
+  // 11. Bring in stock: scan an invoice, then import a CSV and an Excel file.
+  const qtyOf = async name => A.evaluate(async n => { const db = await window.claude.use('db'); const s = await db.collection('items').get(); const d = s.docs.map(x => x.data()).find(x => x.name === n); return d ? {qty:d.qty, cost:d.cost, source:d.source, price:d.price} : null; }, name);
+  const blueBefore = await qtyOf('Blue Widget');
+  await A.getByRole('tab', {name:'Inventory'}).click();
+  await A.getByRole('button', {name:'Bring in stock'}).click();
+  await A.getByText(/0 of 3 scans used this month/).waitFor({timeout:8000});
+  await A.locator('.sheet input[type=file][accept*=pdf]').setInputFiles(PHOTO);
+  await A.getByRole('heading', {name:'Check the invoice'}).waitFor({timeout:15000});
+  await A.waitForTimeout(300); await A.screenshot({path:'/tmp/stockroom-review.png'});
+  const claudeReq = await A.evaluate(async () => (await fetch('http://localhost:54321/mock-anthropic/last')).json());
+  check(claudeReq.body && claudeReq.body.model === 'claude-opus-5-5' && claudeReq.body.messages[0].content[0].source.media_type === 'image/jpeg', 'the photo is sent to Claude as a JPEG');
+  check((await A.locator('.sheet').textContent()).includes('Acme Wholesale'), 'review shows the supplier');
+  const tgts = await A.locator('.sheet .cline select[aria-label="Add to"]').evaluateAll(els => els.map(e => e.selectedOptions[0].textContent));
+  check(tgts[0].includes('Blue Widget') && tgts[1] === 'New item', 'existing item is matched and the new one is marked new');
+  await A.getByRole('button', {name:'Add to inventory'}).click();
+  await A.getByText('Added 2 lines to inventory').waitFor({timeout:10000});
+  const blueAfter = await qtyOf('Blue Widget'), gizmo = await qtyOf('Green Gizmo Deluxe');
+  check(blueAfter.qty === blueBefore.qty + 5, 'matched item gets the received quantity');
+  check(Math.abs(blueAfter.cost - (blueBefore.qty * (blueBefore.cost || 0) + 5 * 2) / (blueBefore.qty + 5)) < 0.001, 'matched item average cost is updated');
+  check(gizmo && gizmo.qty === 12 && gizmo.cost === 1.5 && gizmo.source === 'invoice', 'new item is created from the invoice');
+  await A.waitForTimeout(400);
+  check((await A.locator('.row', {hasText:'Green Gizmo Deluxe'}).textContent()).includes('Needs photo & price'), 'new item is marked Needs photo & price');
+  await A.getByRole('button', {name:/^Needs photo & price \d+/}).click();
+  check((await rowNames(A)).every(t => !t.includes('Blue Widget')), 'Needs photo & price filter works');
+  await A.getByRole('button', {name:/^All \d+/}).click();
+
+  fs.writeFileSync('/tmp/stockroom-stock.csv', 'Supplier invoice\nItem Description,Qty,Unit Price,Item #\nRed Widget,4,3.00,R1\n"Yellow Thing, large",6,$1.25,Y9\nShipping,1,10,\n');
+  const redBefore = await qtyOf('Red Widget');
+  await A.getByRole('button', {name:'Bring in stock'}).click();
+  await A.locator('.sheet input[type=file][accept*=csv]').setInputFiles('/tmp/stockroom-stock.csv');
+  await A.getByRole('heading', {name:'Match the columns'}).waitFor();
+  await A.screenshot({path:'/tmp/stockroom-columns.png'});
+  check((await A.locator('.sheet').textContent()).includes('2 product lines found'), 'CSV columns are detected and totals rows skipped');
+  await A.getByRole('button', {name:'Review lines'}).click();
+  await A.getByRole('button', {name:'Add to inventory'}).click();
+  await A.getByRole('heading', {name:'Check the lines'}).waitFor({state:'detached', timeout:10000});
+  const redAfter = await qtyOf('Red Widget'), yellow = await qtyOf('Yellow Thing, large');
+  check(redAfter.qty === redBefore.qty + 4 && yellow && yellow.qty === 6, 'CSV import adds stock and new items' + ' (red ' + redBefore.qty + '->' + redAfter.qty + ', yellow ' + JSON.stringify(yellow) + ')');
+
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Product', 'Quantity', 'Cost'], ['Purple Doohickey', 9, 0.75]]), 'Sheet1');
+  XLSX.writeFile(wb, '/tmp/stockroom-stock.xlsx');
+  await A.getByRole('button', {name:'Bring in stock'}).click();
+  await A.locator('.sheet input[type=file][accept*=csv]').setInputFiles('/tmp/stockroom-stock.xlsx');
+  await A.getByRole('button', {name:'Review lines'}).click();
+  await A.getByRole('button', {name:'Add to inventory'}).click();
+  await A.getByRole('heading', {name:'Check the lines'}).waitFor({state:'detached', timeout:10000});
+  const purple = await qtyOf('Purple Doohickey');
+  check(purple && purple.qty === 9 && purple.cost === 0.75, 'Excel import works');
+
+  await A.getByRole('button', {name:'Bring in stock'}).click();
+  await A.getByText(/1 of 3 scans used this month/).waitFor({timeout:8000});
+  check(true, 'scan count goes up');
+  await A.keyboard.press('Escape');
+  if (await A.locator('.backdrop').count()) await A.locator('.backdrop .icon-btn').first().click();
+
+  // 12. Sign out returns to the sign-in screen; signing back in works.
   await A.locator('#acctBtn').click();
   await A.getByRole('button', {name:'Sign out'}).click();
   await A.getByRole('tab', {name:'Sign in'}).waitFor({timeout:8000});

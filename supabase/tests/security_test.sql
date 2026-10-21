@@ -158,6 +158,36 @@ select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
 select t.ok(t.count('select * from public.support_log') = 0, 'other companies cannot see that log');
 select t.ok(t.count('select * from public.docs') = 0, 'B still sees none of A after all this');
 
+-- Invoice scanning.
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok((select not enabled from public.scan_status((select v::uuid from ids where k='A'))), 'scanning starts switched off');
+select t.fails($$select public.scan_begin((select v::uuid from ids where k='A'))$$, 'cannot scan while switched off');
+select t.fails($$select public.support_set_scan((select v::uuid from ids where k='A'), true, 2)$$, 'owners cannot switch scanning on themselves');
+select t.fails($$insert into public.scan_settings values ((select v::uuid from ids where k='A'), true, 999)$$, 'scan settings cannot be written directly');
+select t.as_user('00000000-0000-0000-0000-0000000000ff', 'support@stockroom.test');
+select public.support_set_scan((select v::uuid from ids where k='A'), true, 2);
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok((select enabled and monthly_limit = 2 and used = 0 from public.scan_status((select v::uuid from ids where k='A'))), 'support can switch scanning on with a limit');
+create temp table scans(n bigint); grant all on scans to authenticated;
+insert into scans select public.scan_begin((select v::uuid from ids where k='A'));
+select public.scan_finish((select max(n) from scans), false, 10, 0);
+select t.ok((select used = 0 from public.scan_status((select v::uuid from ids where k='A'))), 'a failed scan does not count');
+insert into scans select public.scan_begin((select v::uuid from ids where k='A'));
+select public.scan_finish((select max(n) from scans), true, 1500, 900);
+insert into scans select public.scan_begin((select v::uuid from ids where k='A'));
+select t.ok((select used = 2 from public.scan_status((select v::uuid from ids where k='A'))), 'scans are counted');
+select t.fails($$select public.scan_begin((select v::uuid from ids where k='A'))$$, 'the monthly limit is enforced');
+select t.ok(t.count('select * from public.scan_log') = 3, 'owner can see the scan log');
+select t.as_user('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+select public.scan_finish((select max(n) from scans), false, 0, 0);
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok((select status from public.scan_log where id = (select max(n) from scans)) = 'started', 'only the person who started a scan can finish it');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.fails($$select * from public.scan_status((select v::uuid from ids where k='A'))$$, 'another company cannot see scan status');
+select t.fails($$select public.scan_begin((select v::uuid from ids where k='A'))$$, 'another company cannot scan as A');
+select t.ok(t.count('select * from public.scan_log') = 0, 'another company cannot see the scan log');
+select t.fails($$select public.scan_begin((select v::uuid from ids where k='B'))$$, 'B is still switched off');
+
 -- Signed out.
 reset role; set role anon;
 select t.ok(t.count('select 1 from information_schema.role_table_grants where grantee = ''anon'' and table_schema = ''public''') = 0, 'anon has no table access');

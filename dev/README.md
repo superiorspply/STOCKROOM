@@ -3,6 +3,7 @@
 `server.mjs` runs the site against a local stand-in for Supabase, so changes can be tested without touching the real project.
 
 - **Real:** PostgreSQL with the real migration and security rules, and [PostgREST](https://postgrest.org), the database API Supabase itself uses.
+- **Run as-is:** the edge functions in `supabase/functions/`, at `/functions/v1/<name>` (with a small Deno stand-in). Their Claude calls go to a stand-in at `/mock-anthropic`, which returns a fixed invoice and remembers the last request (GET `/mock-anthropic` shows it).
 - **Simplified:** sign-in (`/auth/v1`), photo storage (`/storage/v1`) and live updates (`/realtime/v1`, broadcast only). These follow the same protocols the Supabase client library uses.
 
 ## Setup
@@ -16,6 +17,7 @@
 ```sh
 node dev/server.mjs        # site on http://localhost:8080, API on :54321 (starts from an empty database each time)
 node dev/tests/e2e.mjs     # full browser test: sign-up, company, items + photos, invites, roles, live updates, isolation, import
+node dev/tests/orders.mjs  # cart, invoice editing, orders list, sales lookup, date ranges, shipping report
 node dev/tests/shots.mjs /tmp   # screenshots of the sign-up and account screens
 ```
 

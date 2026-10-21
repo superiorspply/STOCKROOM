@@ -215,6 +215,42 @@ function realtime(server){
   });
 }
 
+/* ---------- edge functions (run with a small Deno stand-in) and a stand-in Claude API ---------- */
+// supabase/functions/<name>/index.ts runs as-is, except npm: imports point at dev/node_modules.
+// Claude requests go to /mock-anthropic, which returns MOCK_INVOICE and remembers what it was sent.
+export const MOCK_INVOICE = {supplier:'Acme Wholesale', invoice_number:'A-1001', invoice_date:'2026-10-20', currency:'USD', warning:'',
+  lines:[{name:'Blue Widget', code:'', quantity:5, unit_cost:2, line_total:10, note:''},
+         {name:'Green Gizmo Deluxe', code:'GG-77', quantity:12, unit_cost:1.5, line_total:18, note:'Case of 12'}]};
+let lastClaudeRequest = null;
+const fnHandlers = {};
+async function edgeFunction(name){
+  if (fnHandlers[name]) return fnHandlers[name];
+  const src = fs.readFileSync(path.join(ROOT, 'supabase/functions', name, 'index.ts'), 'utf8')
+    .replace(/"npm:((?:@[^/"]+\/)?[^@"]+)@[^"]+"/g, '"$1"');
+  const dir = path.join(ROOT, 'dev', '.functions'); fs.mkdirSync(dir, {recursive:true});
+  const file = path.join(dir, name + '.mts'); fs.writeFileSync(file, src);
+  Object.assign(process.env, {SUPABASE_URL:'http://localhost:' + API_PORT, SUPABASE_ANON_KEY:ANON_KEY,
+    ANTHROPIC_API_KEY:'test-key', ANTHROPIC_BASE_URL:'http://localhost:' + API_PORT + '/mock-anthropic'});
+  let handler = null;
+  globalThis.Deno = {serve: h => { handler = h; }, env: {get: k => process.env[k]}};
+  await import(file + '?t=' + Date.now());
+  return (fnHandlers[name] = handler);
+}
+async function functions(req, res, url){
+  const handler = await edgeFunction(url.pathname.split('/')[3]);
+  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await readBody(req);
+  const r = await handler(new Request('http://localhost' + url.pathname, {method:req.method, headers:req.headers, body}));
+  res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer()));
+}
+async function mockClaude(req, res, url){
+  if (req.method === 'GET') return send(res, 200, lastClaudeRequest || {});
+  lastClaudeRequest = {headers:req.headers, body:JSON.parse((await readBody(req)).toString())};
+  const fail = lastClaudeRequest.body.messages[0].content.find(c => c.type === 'text' && /fail-please/.test(c.text));
+  if (fail) return send(res, 500, {type:'error', error:{type:'api_error', message:'boom'}});
+  send(res, 200, {id:'msg_mock', type:'message', role:'assistant', model:lastClaudeRequest.body.model, stop_reason:'end_turn', stop_sequence:null,
+    content:[{type:'text', text:JSON.stringify(MOCK_INVOICE)}], usage:{input_tokens:1800, output_tokens:420}});
+}
+
 /* ---------- PostgREST + site ---------- */
 function startPostgrest(){
   const bin = process.env.POSTGREST || 'postgrest';
@@ -255,6 +291,8 @@ const api = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/rest/v1')) return proxyRest(req, res, url);
     if (url.pathname.startsWith('/auth/v1')) return await auth(req, res, url);
     if (url.pathname.startsWith('/storage/v1')) return await storage(req, res, url);
+    if (url.pathname.startsWith('/functions/v1/')) return await functions(req, res, url);
+    if (url.pathname.startsWith('/mock-anthropic')) return await mockClaude(req, res, url);
     send(res, 404, {message:'not found'});
   } catch(e){ console.error(e); send(res, 500, {message:String(e.message || e)}); }
 });

@@ -21,6 +21,11 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Changes are broadcast on the private Realtime topic `company:<id>`.
   - Photos are stored at `photos/<company id>/<random>.jpg`.
   - Support access: users in `platform_admins` (added only via the SQL editor) act as `admin` in any company through `my_role`. `support_open` logs each visit to `support_log`, which the company's owner and admins can read.
+- Bring in stock (`openBringIn` in `index.html`): CSV/Excel import (SheetJS loaded from cdnjs on demand) and invoice scanning, both feeding `openInvoiceReview`. New items get `source:'invoice'` and show "Needs photo & price" until they have a photo and price.
+  - Scanning goes through the `invoices` runtime in `js/backend.js` to the edge function `supabase/functions/scan-invoice` (Claude Opus 5.5 with structured output). The function is deployed by the owner from the dashboard and holds the `ANTHROPIC_API_KEY` secret.
+  - Access and the monthly limit are in `scan_settings` / `scan_log`, changed only by support via `support_set_scan`.
+  - The dev server runs the function as-is against a stand-in Claude API at `/mock-anthropic`.
+- Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 
 ## Rules

@@ -158,6 +158,37 @@ try {
   check(sum30.includes('$10.00') && (await P.getByText('Per day').count()) === 1, 'last 30 days shows shipping per day (' + sum30 + ')');
   await P.screenshot({path:'/tmp/stockroom-shipping.png'});
   await P.getByRole('tab', {name:'Orders'}).click(); await P.screenshot({path:'/tmp/stockroom-orders.png'});
+
+  // 8. Shoes: pick several sizes at once, and add another size from the cart.
+  await P.evaluate(async () => {
+    const db = await window.claude.use('db');
+    await db.doc('items/s1').set({sku:'SS-0100', name:'Runner', category:'Sneakers', sizeType:'mens', qty:6, sizes:{'9':2, '10':1, '11':3}, cost:40, price:90, priceMedium:null, priceLarge:null, tiers:[], createdAt:new Date().toISOString()});
+  });
+  await P.getByRole('tab', {name:'Inventory'}).click();
+  await P.locator('[data-cartid="s1"]').click();
+  await P.getByRole('heading', {name:'Pick sizes · SS-0100'}).waitFor();
+  await P.getByRole('button', {name:/^Size 9,/}).click();
+  await P.getByRole('button', {name:/^Size 9,/}).click();
+  await P.getByRole('button', {name:/^Size 11,/}).click();
+  await P.screenshot({path:'/tmp/stockroom-sizes.png'});
+  check(await P.getByRole('button', {name:'Size 9, 2 left, 2 in cart'}).count() === 1, 'size picker counts what is in the cart per size');
+  await P.getByRole('button', {name:/^Size 9,/}).click();
+  check(await P.getByText('Only 2 in stock in size 9.').count() === 1, 'size picker stops at the stock for that size');
+  await P.getByRole('button', {name:'Done'}).click();
+  await P.locator('#cartBar').click();
+  const szs = () => P.evaluate(() => [...document.querySelectorAll('.cline select')].map(s => s.value + ':' + s.closest('.cline').querySelector('input[type=number]').value).join(','));
+  check(await szs() === '9:2,11:1', 'cart has one line per size (' + await szs() + ')');
+  await P.getByRole('button', {name:'+ Another size'}).first().click();
+  check(await szs() === '9:2,10:1,11:1', 'Another size adds the next size not in the cart (' + await szs() + ')');
+  check(await P.getByRole('button', {name:'+ Another size'}).count() === 0, 'Another size hides once every size is in the cart');
+  await P.locator('.cline select').nth(1).selectOption('11');
+  check(await szs() === '9:2,11:2', 'changing a line to a size already in the cart merges them (' + await szs() + ')');
+  await P.locator('.sheet select').first().selectOption({label:'Jamie Rivera (@jamie)'});
+  await P.getByRole('button', {name:'Create invoice'}).click();
+  await P.getByRole('heading', {name:/^Invoice INV-0005/}).waitFor({timeout:10000});
+  const left = await P.evaluate(async () => { const db = await window.claude.use('db'); const d = await db.doc('items/s1').get(); return JSON.stringify([d.data().qty, d.data().sizes]); });
+  check(left === '[2,{"10":1,"11":1}]', 'invoice takes each size out of stock (' + left + ')');
+  await P.locator('.sheet').getByRole('button', {name:'Close'}).first().click();
   await ctx.setDefaultTimeout(5000);
   const ctxD = await context(b, {viewport:{width:1280, height:800}}), D = await page(ctxD, errs);
   await D.goto(SITE); await D.getByLabel('Email').fill(`orders-${run}@shop.test`); await D.getByLabel('Password').fill('correct-horse-9');

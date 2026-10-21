@@ -25,6 +25,7 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Scanning goes through the `invoices` runtime in `js/backend.js` to the edge function `supabase/functions/scan-invoice` (Claude Opus 5.5 with structured output). The function is deployed by the owner from the dashboard and holds the `ANTHROPIC_API_KEY` secret.
   - Access and the monthly limit are in `scan_settings` / `scan_log`, changed only by support via `support_set_scan`.
   - The dev server runs the function as-is against a stand-in Claude API at `/mock-anthropic`.
+- Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 
 ## Rules

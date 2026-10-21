@@ -17,6 +17,7 @@
 ```sh
 node dev/server.mjs        # site on http://localhost:8080, API on :54321 (starts from an empty database each time)
 node dev/tests/e2e.mjs     # full browser test: sign-up, company, items + photos, invites, roles, live updates, isolation, import
+node dev/tests/orders.mjs  # cart, invoice editing, orders list, sales lookup, date ranges, shipping report
 node dev/tests/shots.mjs /tmp   # screenshots of the sign-up and account screens
 ```
 

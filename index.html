@@ -330,6 +330,30 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 .ordline .acts{margin-top:8px}
 .ordline .qty span,.ordhead .qty span{display:block}
 .chk{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin:8px 0}
+.btn.addline{width:100%;border-style:dashed;margin:2px 0 6px}
+.cline.removed{opacity:.55}.cline.removed b{text-decoration:line-through}
+.addrow{display:flex;gap:8px;margin:4px 0 12px}.addrow select{flex:1;min-width:0;padding:11px 10px;border:1px solid var(--line);border-radius:12px;background:#0b0b0d;color:var(--ink);font-size:15px}
+.olist{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.oline,.ohead{display:grid;grid-template-columns:76px minmax(0,1fr) auto 84px;gap:10px;align-items:center;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;font-size:14px;text-align:left}
+.oline{cursor:pointer}.oline:hover,.sline:hover{background:var(--surface2)}
+.ohead{display:none;font-size:12px;font-weight:600;color:var(--muted);border-top:0}
+.olist>.oline:first-of-type{border-top:0}
+.ono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-weight:600;font-size:12.5px;white-space:nowrap}
+.ocust{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.odate,.oship{display:none}
+.ototal{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sline{display:flex;gap:10px;align-items:center;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.olist>.sline:first-child{border-top:0}.sline .main{flex:1;min-width:0}.sline .qty{text-align:right;flex:none}.sline .qty span{display:block}
+@media (min-width:700px){.oline,.ohead{grid-template-columns:96px 104px minmax(0,1fr) 92px 112px 96px}.odate,.oship{display:block}.ohead{display:grid}.olist>.ohead+.oline{border-top:1px solid var(--line)}}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}.cal-title{font-size:17px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{text-align:center;font-size:12px;color:var(--muted);padding:4px 0}
+.cal-day{position:relative;aspect-ratio:1;border:0;border-radius:12px;background:var(--surface2);color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
+.cal-day.today{outline:1px solid var(--muted)}
+.cal-day.in{background:var(--accent-soft);color:#fff}
+.cal-day.edge{background:var(--accent);color:#fff;font-weight:700}
+.cal-day.sold::after,.cal-dot{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.cal-day.sold::after{position:absolute;left:50%;bottom:6px;transform:translateX(-50%)}
 @media print{
   body *{visibility:hidden}
   .labelwrap,.labelwrap *{visibility:visible}
@@ -435,7 +459,7 @@ function pdfLogo(doc,x,y,w){ try { doc.addImage(LOGO,'JPEG',x,y,w,w); return tru
 const state = {
   items:[], customers:[], sales:[], invoices:[], business:'',
   loaded:{items:false,customers:false,sales:false,invoices:false},
-  tab:'home', hperiod:'30', hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rperiod:'30', cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
+  tab:'home', hperiod:'30', hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rrange:{key:'30'}, rview:'sales', srange:{key:'30'}, sview:'orders', sq:'', slimit:0, cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
   db:null, dl:null, assets:null, status:'connecting', canWrite:true
 };
 let host = null; // list host for current tab
@@ -931,6 +955,7 @@ function openPriceList(initialCat){
 
 /* ---------- invoices ---------- */
 function invKey(s){ return s.invoiceNo || ('S-'+s.id); }
+const skuText = s => (s.custom || s.sku==='CUSTOM') ? '' : (s.sku||'');
 function invNumber(key){ return key.startsWith('S-') ? 'OLD-'+key.slice(2,7).toUpperCase() : key; }
 function invoiceSales(key){ return state.sales.filter(s=>invKey(s)===key).sort((a,b)=>String(a.at).localeCompare(String(b.at))); }
 function invMeta(key){ return state.invoices.find(x=>x.id===key) || {}; }
@@ -944,7 +969,7 @@ const invTotal = (key, sub) => round2(sub + num(invMeta(key).shipping));
 const longDate = iso => new Date(iso||Date.now()).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
 
 function invoiceHtml(d){
-  const rows = d.lines.map(s=>`<tr><td><div class="n">${esc(lineName(s))}</div><div class="k">${esc(s.sku)}</div></td><td class="r">${esc(fmtN(s.qty))}</td><td class="r">${esc(money(s.unitPrice))}</td><td class="r b">${esc(money(s.total))}</td></tr>`).join('');
+  const rows = d.lines.map(s=>`<tr><td><div class="n">${esc(lineName(s))}</div>${skuText(s) ? '<div class="k">'+esc(skuText(s))+'</div>' : ''}</td><td class="r">${esc(fmtN(s.qty))}</td><td class="r">${esc(money(s.unitPrice))}</td><td class="r b">${esc(money(s.total))}</td></tr>`).join('');
   const biz = String(state.business||'').split('\n').map(x=>x.trim()).filter(Boolean).map(esc).join('<br>');
   const bill = [d.handle, d.phone, d.email].filter(Boolean).map(esc).join('<br>') + (d.address ? '<br>'+esc(d.address).replace(/\n/g,'<br>') : '') + (d.track ? '<br><b>Tracking:</b> '+esc(d.track) : '');
   const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1030,7 +1055,7 @@ function makeInvoicePdf(d){
     if (y + rh > H - 80){ pageTop(); head(); }
     if (n%2===0){ fill(ZEB); doc.roundedRect(M, y, W-2*M, rh, 6, 6, 'F'); }
     ink(INK); font('bold',10); doc.text(nl, M+12, y+17);
-    ink(MUTE); doc.setFont('courier','normal'); doc.setFontSize(8); doc.text(ascii(s.sku), M+12, y+17+nl.length*12-2);
+    if (skuText(s)){ ink(MUTE); doc.setFont('courier','normal'); doc.setFontSize(8); doc.text(ascii(skuText(s)), M+12, y+17+nl.length*12-2); }
     ink(INK); font('normal',10);
     doc.text(ascii(fmtN(s.qty)), C.qty, y+17, {align:'right'}); doc.text(ascii(money(s.unitPrice)), C.price, y+17, {align:'right'});
     font('bold',10); doc.text(ascii(money(s.total)), C.total, y+17, {align:'right'});
@@ -1127,12 +1152,119 @@ function openInvoice(key){
     h('div',{class:'det',style:'margin:0 0 6px'}, billLines.map((t,n)=>h('div',{style:n===0?'font-weight:600':''}, t))),
     addrs.length > 1 ? field('Bill to address', addrSel) : (addrs.length ? h('div',{class:'aitem'}, h('div',{class:'addr'}, addrs[0].text)) : (cust ? h('p',{class:'hint'},'No address saved for this customer. Add one in their profile.') : null)),
     h('div',{class:'hh'}, 'Items'),
-    lines.map(s=>h('div',{class:'hrow'}, h('div',{class:'hmain'}, h('div',{}, fmtN(s.qty)+' × '+lineName(s)), h('div',{class:'meta',style:'margin-top:2px'}, h('span',{class:'sku'}, s.sku), h('span',{}, money(s.unitPrice)+' each'))), h('b',{}, money(s.total)))),
+    lines.map(s=>h('div',{class:'hrow'}, h('div',{class:'hmain'}, h('div',{}, fmtN(s.qty)+' × '+lineName(s)), h('div',{class:'meta',style:'margin-top:2px'}, skuText(s) ? h('span',{class:'sku'}, skuText(s)) : null, h('span',{}, money(s.unitPrice)+' each'))), h('b',{}, money(s.total)))),
     h('div',{style:'height:12px'}),
     h('div',{class:'grid2'}, field('Shipping ($)', ship), field('Note on invoice', noteIn)),
     payBox,
     h('details',{class:'sizes'}, h('summary',{},'Your business details on invoices'), h('div',{style:'margin-top:8px'}, field('Shown at the top of every invoice', bizIn), bizBtn)),
-    h('div',{class:'stickyfoot'}, h('div',{class:'foot',style:'flex-direction:column'}, pdfBtn, htmlBtn, shipBtn, packBtn, saveBtn))), {noFocus:true});
+    h('div',{class:'stickyfoot'}, h('div',{class:'foot',style:'flex-direction:column'}, pdfBtn, state.canWrite ? h('button',{class:'btn',type:'button',onclick:()=>openInvoiceEdit(key)},'Edit items') : null, htmlBtn, shipBtn, packBtn, saveBtn))), {noFocus:true});
+}
+
+/* ---------- edit an invoice's items ---------- */
+function openInvoiceEdit(key){
+  const orig = invoiceSales(key); if (!orig.length) return;
+  const first = orig[0]; const shipAmt = round2(num(invMeta(key).shipping));
+  const rows = orig.map(s=>({s, qty:String(s.qty), price:String(s.unitPrice), del:false}));
+  const adds = []; let uid = 0;
+  const list = h('div',{}); const err = h('p',{class:'err'}); const sumEl = h('p',{class:'total'});
+  const sizeKey = (it, sz) => isSized(it) ? (sz || 'Unsized') : '';
+  const itemSel = h('select',{'aria-label':'Add an item from inventory'}, h('option',{value:''},'+ Add an item from inventory…'),
+    state.items.filter(i=>i.qty>0).sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(i=>h('option',{value:i.id}, i.name+' · '+i.sku+' ('+fmtN(i.qty)+' left)')));
+  itemSel.addEventListener('change', ()=>{
+    const it = state.items.find(i=>i.id===itemSel.value); itemSel.value = ''; if (!it) return;
+    const size = isSized(it) ? (sizeEntries(it).find(([k,v])=>v>0)||['Unsized'])[0] : '';
+    adds.push({uid:++uid, itemId:it.id, size, qty:'1', price:String(priceFor(it,1)), touched:false}); draw();
+  });
+  const addCustom = ()=>{
+    adds.push({uid:++uid, custom:true, name:'', qty:'1', price:'', cost:''}); draw();
+    const names = list.querySelectorAll('.cline.custom input[type=text]'); const el = names[names.length-1];
+    if (el){ el.focus({preventScroll:true}); el.scrollIntoView({block:'center', behavior:'smooth'}); }
+  };
+  const lt = (q,p) => round2(int(q)*num(p));
+  const newSub = () => round2(rows.filter(r=>!r.del).reduce((a,r)=>a+lt(r.qty,r.price),0) + adds.reduce((a,l)=>a+lt(l.qty,l.price),0));
+  const recalc = ()=>{ const sub = newSub(); sumEl.textContent = 'Subtotal '+money(sub)+(shipAmt>0 ? ' · Total with shipping '+money(round2(sub+shipAmt)) : ''); };
+  const numIn = (val, on, dec) => { const e = h('input',{type:'number',min:dec ? '0' : '1',step:dec ? 'any' : '1',inputmode:dec ? 'decimal' : 'numeric',value:val}); e.addEventListener('input', ()=>{ on(e.value); recalc(); }); return e; };
+  const draw = ()=>{
+    list.replaceChildren(
+      ...rows.map(r=>h('div',{class:'cline'+(r.del ? ' removed' : '')},
+        h('div',{style:'display:flex;justify-content:space-between;gap:8px;align-items:flex-start'},
+          h('div',{}, h('b',{}, lineName(r.s)), skuText(r.s) ? h('span',{class:'hint',style:'display:block;margin:2px 0 0'}, skuText(r.s)) : null),
+          h('button',{class:'linkdanger',type:'button',onclick:()=>{ r.del = !r.del; draw(); }}, r.del ? 'Keep' : 'Remove')),
+        r.del ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'Will be removed'+(r.s.itemId ? ' and '+fmtN(r.s.qty)+' put back in stock.' : '.'))
+          : h('div',{class:'grid2'}, field('Quantity', numIn(r.qty, v=>{ r.qty = v; })), field('Price each ($)', numIn(r.price, v=>{ r.price = v; }, true))))),
+      ...adds.map(l=>{
+        const it = l.custom ? null : state.items.find(i=>i.id===l.itemId);
+        const head = h('div',{style:'display:flex;justify-content:space-between;gap:8px;align-items:flex-start'},
+          h('div',{}, h('span',{class:'tbadge'},'New'), ' ', h('b',{}, l.custom ? 'Custom item' : (it ? it.name : 'Item'))),
+          h('button',{class:'icon-btn',type:'button','aria-label':'Remove this new line',onclick:()=>{ adds.splice(adds.indexOf(l),1); draw(); }},'×'));
+        if (l.custom){
+          const nm = h('input',{type:'text',placeholder:'What did you sell?',autocomplete:'off',value:l.name}); nm.addEventListener('input', ()=>{ l.name = nm.value; });
+          return h('div',{class:'cline custom'}, head, field('Item name', nm),
+            h('div',{class:'grid2'}, field('Quantity', numIn(l.qty, v=>{ l.qty = v; })), field('Price each ($)', numIn(l.price, v=>{ l.price = v; }, true))),
+            showCost() ? field('Cost each ($, optional)', numIn(l.cost, v=>{ l.cost = v; }, true)) : null);
+        }
+        const priceIn = numIn(l.price, v=>{ l.price = v; l.touched = true; }, true);
+        const qtyIn = numIn(l.qty, v=>{ l.qty = v; if (!l.touched && it){ l.price = String(priceFor(it, int(v)||1)); priceIn.value = l.price; } });
+        const szSel = it && isSized(it) ? h('select',{}, sizeEntries(it).map(([k,v])=>h('option',{value:k},(k==='Unsized' ? 'Unsized' : 'Size '+k)+' ('+v+' left)'))) : null;
+        if (szSel){ szSel.value = l.size; szSel.addEventListener('change', ()=>{ l.size = szSel.value; }); }
+        return h('div',{class:'cline'}, head, szSel ? field('Size', szSel) : null, h('div',{class:'grid2'}, field('Quantity', qtyIn), field('Price each ($)', priceIn)));
+      }));
+    recalc();
+  };
+  const btn = h('button',{class:'btn primary',type:'button'},'Save changes');
+  btn.addEventListener('click', async ()=>{
+    err.textContent = '';
+    const kept = rows.filter(r=>!r.del);
+    if (!kept.length && !adds.length){ err.textContent = 'An invoice needs at least one item. To cancel the whole order, undo its sales in the Sales tab.'; return; }
+    for (const r of kept){ if (int(r.qty)<1){ err.textContent = 'Enter a quantity of at least 1 for '+lineName(r.s)+'.'; return; } if (String(r.price).trim()==='' || num(r.price)<0){ err.textContent = 'Check the price for '+lineName(r.s)+'.'; return; } }
+    for (const l of adds){
+      if (l.custom && !l.name.trim()){ err.textContent = 'Enter a name for the custom item.'; return; }
+      if (int(l.qty)<1){ err.textContent = 'Enter a quantity of at least 1 for each new line.'; return; }
+      if (String(l.price).trim()==='' || num(l.price)<0){ err.textContent = 'Enter a price for each new line.'; return; }
+      if (!l.custom && !state.items.some(i=>i.id===l.itemId)){ err.textContent = 'An item you added no longer exists.'; return; }
+    }
+    // Units each item (and size) gives up (+) or gets back (-) because of these changes.
+    const delta = new Map();
+    const bump = (id, sz, n) => { if (!id || !n) return; const k = id+'|'+sz; delta.set(k, (delta.get(k)||0)+n); };
+    for (const r of rows){ const it = state.items.find(i=>i.id===r.s.itemId); if (!it) continue; bump(it.id, sizeKey(it, r.s.size), (r.del ? 0 : int(r.qty)) - (r.s.qty||0)); }
+    for (const l of adds){ if (l.custom) continue; const it = state.items.find(i=>i.id===l.itemId); bump(it.id, sizeKey(it, l.size==='Unsized' ? '' : l.size), int(l.qty)); }
+    const perItem = new Map();
+    for (const [k,n] of delta){ const [id,sz] = k.split('|'); const it = state.items.find(i=>i.id===id);
+      if (sz && n>0 && n > (sizeMapOf(it)[sz]||0)){ err.textContent = 'Only '+(sizeMapOf(it)[sz]||0)+' more left in size '+sz+' of '+it.sku+'.'; return; }
+      perItem.set(id, (perItem.get(id)||0)+n); }
+    for (const [id,n] of perItem){ const it = state.items.find(i=>i.id===id); if (n>0 && n>(it.qty||0)){ err.textContent = 'Only '+(it.qty||0)+' more of '+it.sku+' in stock.'; return; } }
+    btn.disabled = true;
+    const oldSub = round2(orig.reduce((a,s)=>a+(s.total||0),0)), sub = newSub();
+    const ok = await write(async()=>{
+      for (const r of rows){
+        if (r.del){ await state.db.doc('sales/'+r.s.id).delete(); continue; }
+        const q = int(r.qty), p = round4(num(r.price));
+        if (q!==r.s.qty || p!==r.s.unitPrice) await state.db.doc('sales/'+r.s.id).update({qty:q, unitPrice:p, total:round2(q*p)});
+      }
+      const at = nowIso(), base = {customerId:first.customerId||'', customerName:first.customerName||'', invoiceNo:first.invoiceNo||key, note:'', at};
+      for (const l of adds){
+        const q = int(l.qty), p = round4(num(l.price));
+        if (l.custom){ await state.db.collection('sales').doc().set(Object.assign({itemId:'', sku:'CUSTOM', name:l.name.trim(), qty:q, size:'', sizeType:'', unitPrice:p, unitCost:round4(num(l.cost)), total:round2(q*p), custom:true}, base)); continue; }
+        const it = state.items.find(i=>i.id===l.itemId); const sz = isSized(it) && l.size!=='Unsized' ? l.size : '';
+        await state.db.collection('sales').doc().set(Object.assign({itemId:it.id, sku:it.sku, name:it.name, qty:q, size:sz, sizeType:sz ? (it.sizeType||'') : '', unitPrice:p, unitCost:it.cost||0, total:round2(q*p)}, base));
+      }
+      for (const [id,n] of perItem){
+        if (!n) continue;
+        const it = state.items.find(i=>i.id===id); const left = (it.qty||0)-n;
+        const upd = {qty:left, queued:left>0 ? !!it.queued : false, updatedAt:nowIso()};
+        if (isSized(it)){ const m = Object.assign({}, sizeMapOf(it)); for (const [k,d] of delta){ const [kid,sz] = k.split('|'); if (kid!==id) continue; m[sz] = (m[sz]||0)-d; if (m[sz]<=0) delete m[sz]; } upd.sizes = m; }
+        await state.db.doc('items/'+id).update(upd);
+      }
+      if (first.customerId && state.settingsSaved && state.customers.some(c=>c.id===first.customerId)) await state.db.doc('customers/'+first.customerId).update({bracket:bracketOf(Math.max(0, spentBy(first.customerId)-oldSub+sub), state.settings.medium, state.settings.large)});
+    });
+    if (ok){ closeSheet(); toast('Invoice '+invNumber(key)+' updated'); setTimeout(()=>openInvoice(key), 350); } else btn.disabled = false;
+  });
+  draw();
+  openSheet('Edit '+invNumber(key), h('div',{},
+    h('p',{class:'hint',style:'margin:0 0 12px'}, (first.customerName || 'No customer')+' · '+longDate(first.at)+'. Change quantities or prices, remove lines, or add more. Stock updates when you save.'),
+    list,
+    h('div',{class:'addrow'}, itemSel, h('button',{class:'btn',type:'button',onclick:addCustom},'+ Custom item')),
+    h('div',{class:'stickyfoot'}, sumEl, err, h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:()=>openInvoice(key)},'Cancel'), btn))), {noFocus:true});
 }
 
 /* ---------- orders: payment + shipping ---------- */
@@ -1279,7 +1411,7 @@ function openRemind(key){
 }
 
 function packingHtml(d){
-  const rows = d.lines.map(s=>`<tr><td class="c"><span class="bx"></span></td><td><div class="n">${esc(lineName(s))}</div><div class="k">${esc(s.sku)}</div></td><td class="r">${esc(fmtN(s.qty))}</td></tr>`).join('');
+  const rows = d.lines.map(s=>`<tr><td class="c"><span class="bx"></span></td><td><div class="n">${esc(lineName(s))}</div>${skuText(s) ? '<div class="k">'+esc(skuText(s))+'</div>' : ''}</td><td class="r">${esc(fmtN(s.qty))}</td></tr>`).join('');
   const addr = d.address ? '<br>'+esc(d.address).replace(/\n/g,'<br>') : '';
   const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#0e0e11}.bar{padding:12px 20px;background:#0e0e11}.bar button{font-size:15px;padding:9px 18px;border-radius:10px;border:0;background:#e5192b;color:#fff;font-weight:600;cursor:pointer}
 .hd{background:#0e0e11;color:#fff;padding:26px 36px;display:flex;justify-content:space-between;border-bottom:6px solid #e5192b}.hd h1{margin:0;font-size:28px}.hd .s{color:#ff5a64;font-size:13px;margin-top:4px}.hd .r{text-align:right;font-size:13px}.hd .r b{display:block;font-size:20px}
@@ -1321,7 +1453,7 @@ function makePackingPdf(d){
     if (n%2===0){ fill(ZEB); doc.roundedRect(M, y, W-2*M, rh, 6, 6, 'F'); }
     doc.setDrawColor(100,100,110); doc.setLineWidth(1.2); doc.roundedRect(M+14, y+9, 15, 15, 3, 3, 'S');
     ink(INK); font('bold',11); doc.text(nl, M+68, y+20);
-    ink(MUTE); doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.text(ascii(s.sku), M+68, y+20+nl.length*13-2);
+    if (skuText(s)){ ink(MUTE); doc.setFont('courier','normal'); doc.setFontSize(8.5); doc.text(ascii(skuText(s)), M+68, y+20+nl.length*13-2); }
     ink(INK); font('bold',14); doc.text(ascii(fmtN(s.qty)), W-M-12, y+21, {align:'right'});
     y += rh;
   });
@@ -1347,7 +1479,7 @@ async function savePackingSlip(d){
 function orderRow(v){
   const days = daysSince(v.at);
   const url = v.tracking ? trackUrl(v.carrier, v.tracking) : '';
-  const step = v.ship==='to_pack' ? ['Mark packed', ()=>write(()=>saveInvoiceMeta(v.key,{shipStatus:'packed', packedAt:nowIso()}))]
+  const step = v.ship==='to_pack' ? ['Mark packed', async ()=>{ if (await write(()=>saveInvoiceMeta(v.key,{shipStatus:'packed', packedAt:nowIso()})) && document.querySelector('.backdrop')) openOrder(v.key); }]
     : v.ship==='packed' ? ['Mark shipped', ()=>openShip(v.key,'shipped')] : ['Tracking', ()=>openShip(v.key)];
   return h('div',{class:'row'},
     h('div',{class:'r1'},
@@ -1366,6 +1498,21 @@ function orderRow(v){
       h('button',{class:'btn',type:'button',onclick:()=>savePackingSlip(baseInvoice(v.key))},'Packing slip'),
       h('button',{class:'btn',type:'button',onclick:()=>openInvoice(v.key)},'Invoice')));
 }
+function orderLine(v){
+  return h('button',{class:'oline',type:'button',onclick:()=>openOrder(v.key)},
+    h('span',{class:'ono'}, v.no), h('span',{class:'odate'}, fmtDate(v.at)), h('span',{class:'ocust'}, v.customerName || 'No customer'),
+    h('span',{class:'opay'}, statusBadge(v.status)),
+    h('span',{class:'oship'}, h('span',{class:'badge '+(v.ship==='shipped'?'b-in':v.ship==='packed'?'b-q':'b-out')}, shipLabel(v.ship))),
+    h('span',{class:'ototal'}, money(v.total)));
+}
+function openOrder(key){
+  const v = allInvoices().find(x=>x.key===key); if (!v){ closeSheet(); return; }
+  const sh = round2(num(invMeta(key).shipping));
+  openSheet('Order '+v.no, h('div',{}, orderRow(v),
+    h('div',{class:'hh'},'Items'),
+    invoiceSales(key).map(s=>h('div',{class:'hrow'}, h('div',{class:'hmain'}, fmtN(s.qty)+' × '+lineName(s)), h('b',{}, money(s.total)))),
+    sh>0 ? h('div',{class:'hrow'}, h('div',{class:'hmain'},'Shipping'), h('b',{}, money(sh))) : null), {noFocus:true});
+}
 function renderOrders(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Orders cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales || !state.loaded.invoices){ host.append(h('p',{class:'empty'},'Loading orders…')); return; }
@@ -1382,17 +1529,88 @@ function renderOrders(){
     return !q || [v.no, v.customerName, v.tracking, v.carrier].some(x=>String(x||'').toLowerCase().includes(q));
   });
   if (!list.length){ host.append(h('p',{class:'empty'},'No orders match.')); return; }
-  host.append(h('div',{class:'panel'}, list.map(orderRow)));
+  host.append(h('div',{class:'olist'}, h('div',{class:'ohead','aria-hidden':'true'}, h('span',{},'Order'), h('span',{class:'odate'},'Date'), h('span',{},'Customer'), h('span',{},'Payment'), h('span',{class:'oship'},'Fulfillment'), h('span',{class:'ototal'},'Total')), list.map(orderLine)));
+}
+
+/* ---------- date ranges (sales, reports, shipping) ---------- */
+const RANGES = [['today','Today'],['yesterday','Yesterday'],['7','7 days'],['30','30 days'],['month','This month'],['lastmonth','Last month'],['all','All time']];
+const dayMs = t => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+const addDays = (t, n) => { const d = new Date(t); d.setDate(d.getDate()+n); return d.getTime(); };
+const fmtDateTime = iso => new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+function rangeBounds(r){
+  const t0 = dayMs(Date.now());
+  if (r.key==='today') return {from:t0, to:addDays(t0,1)};
+  if (r.key==='yesterday') return {from:addDays(t0,-1), to:t0};
+  if (r.key==='7') return {from:addDays(t0,-6), to:addDays(t0,1)};
+  if (r.key==='30') return {from:addDays(t0,-29), to:addDays(t0,1)};
+  if (r.key==='month'){ const d = new Date(t0); d.setDate(1); return {from:d.getTime(), to:addDays(t0,1)}; }
+  if (r.key==='lastmonth'){ const d = new Date(t0); d.setDate(1); const to = d.getTime(); d.setMonth(d.getMonth()-1); return {from:d.getTime(), to}; }
+  if (r.key==='custom') return {from:r.from, to:addDays(r.to,1)};
+  return {from:0, to:Infinity};
+}
+function rangeLabel(r){
+  if (r.key!=='custom') return (RANGES.find(x=>x[0]===r.key)||RANGES[3])[1];
+  return r.from===r.to ? fmtDate(r.from) : fmtDate(r.from)+' – '+fmtDate(r.to);
+}
+const inBounds = (iso, b) => { const t = new Date(iso).getTime(); return t>=b.from && t<b.to; };
+function rangeChips(r, onChange){
+  return h('div',{class:'chips'},
+    RANGES.map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(r.key===k),onclick:()=>{ r.key = k; onChange(); }}, l)),
+    h('button',{class:'chip',type:'button','aria-pressed':String(r.key==='custom'),onclick:()=>openRangePicker(r, onChange)}, r.key==='custom' ? rangeLabel(r)+' ✎' : 'Pick dates…'));
+}
+// Calendar: tap one day for that day, tap a second day to highlight the range between them.
+function openRangePicker(r, onChange){
+  let a = r.key==='custom' ? r.from : null, b = r.key==='custom' && r.to!==r.from ? r.to : null;
+  const view = new Date(a!=null ? a : Date.now()); view.setDate(1); view.setHours(0,0,0,0);
+  const soldDays = new Set(state.sales.map(s=>dayMs(s.at)));
+  const title = h('b',{class:'cal-title'}); const grid = h('div',{class:'cal'}); const info = h('p',{class:'hint',style:'min-height:2.6em'});
+  const go = h('button',{class:'btn primary',type:'button'},'Show these dates');
+  const draw = ()=>{
+    title.textContent = view.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    const lo = a, hi = b!=null ? b : a, today = dayMs(Date.now());
+    const cells = ['S','M','T','W','T','F','S'].map(d=>h('span',{class:'cal-dow'},d));
+    for (let i=0;i<view.getDay();i++) cells.push(h('span',{}));
+    const n = new Date(view.getFullYear(), view.getMonth()+1, 0).getDate();
+    for (let d=1; d<=n; d++){
+      const t = new Date(view.getFullYear(), view.getMonth(), d).getTime();
+      const on = lo!=null && t>=lo && t<=hi;
+      const cls = 'cal-day'+(on ? ' in' : '')+(t===lo || t===hi ? ' edge' : '')+(t===today ? ' today' : '')+(soldDays.has(t) ? ' sold' : '');
+      cells.push(h('button',{type:'button',class:cls,'aria-pressed':String(on),'aria-label':new Date(t).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}),onclick:()=>pick(t)}, String(d)));
+    }
+    grid.replaceChildren(...cells);
+    info.textContent = a==null ? 'Tap a day. Tap a second day to highlight every day in between.' : b==null ? fmtDate(a)+' only. Tap another day to make it a range.' : fmtDate(a)+' – '+fmtDate(b)+' · '+(Math.round((b-a)/864e5)+1)+' days';
+    go.disabled = a==null;
+  };
+  let fresh = true;   // the first tap after opening always starts a new selection
+  const pick = t=>{ if (fresh || a==null || b!=null){ a = t; b = null; fresh = false; } else if (t<a){ b = a; a = t; } else if (t>a) b = t; draw(); };
+  const step = n=>{ view.setMonth(view.getMonth()+n); draw(); };
+  go.addEventListener('click', ()=>{ Object.assign(r, {key:'custom', from:a, to:b!=null ? b : a}); closeSheet(); onChange(); });
+  draw();
+  openSheet('Pick dates', h('div',{},
+    h('div',{class:'cal-head'}, h('button',{class:'icon-btn',type:'button','aria-label':'Previous month',onclick:()=>step(-1)},'‹'), title, h('button',{class:'icon-btn',type:'button','aria-label':'Next month',onclick:()=>step(1)},'›')),
+    grid, h('p',{class:'hint',style:'margin:6px 0 0'}, h('span',{class:'cal-dot'}), ' a day with sales'), info,
+    h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:()=>{ a = b = null; draw(); }},'Clear'), go)), {noFocus:true});
+}
+// Totals per day (short ranges) or per month (long ranges) for a bar chart and a table.
+function buckets(entries, bounds){
+  const ts = entries.map(e=>e.t);
+  const from = isFinite(bounds.from) && bounds.from>0 ? bounds.from : (ts.length ? dayMs(Math.min(...ts)) : dayMs(Date.now()));
+  const to = isFinite(bounds.to) ? bounds.to : addDays(dayMs(Date.now()),1);
+  const byDay = (to-from)/864e5 <= 62;
+  const out = [];
+  if (byDay){ for (let t=from; t<to; t=addDays(t,1)) out.push({t, end:addDays(t,1), label:fmtDate(t), v:0, n:0}); }
+  else { const d = new Date(from); d.setDate(1); while (d.getTime()<to){ const t = d.getTime(); d.setMonth(d.getMonth()+1); out.push({t, end:d.getTime(), label:new Date(t).toLocaleDateString(undefined,{month:'short',year:'numeric'}), v:0, n:0}); } }
+  for (const e of entries){ const k = out.find(x=>e.t>=x.t && e.t<x.end); if (k){ k.v += e.v; k.n += 1; } }
+  return {byDay, rows:out};
+}
+function bucketChart(title, bk, fmt){
+  const mx = Math.max(1, ...bk.rows.map(x=>x.v));
+  return h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 8px'}, title+(bk.byDay ? ' by day' : ' by month')),
+    h('div',{class:'days'}, bk.rows.map(x=>h('i',{style:'height:'+Math.max(2, Math.round(x.v/mx*100))+'%',title:x.label+': '+fmt(x.v)}))),
+    bk.rows.length ? h('div',{class:'meta',style:'justify-content:space-between'}, h('span',{}, bk.rows[0].label), h('span',{}, bk.rows[bk.rows.length-1].label)) : null);
 }
 
 /* ---------- reports ---------- */
-const PERIODS = [['today','Today'],['7','7 days'],['30','30 days'],['all','All time']];
-function periodStart(k){
-  if (k==='all') return 0;
-  const d = new Date(); d.setHours(0,0,0,0);
-  if (k==='7') d.setDate(d.getDate()-6); else if (k==='30') d.setDate(d.getDate()-29);
-  return d.getTime();
-}
 function aggBy(sales, keyFn, labelFn){
   const m = new Map();
   for (const s of sales){
@@ -1426,26 +1644,21 @@ function profitBlock(sales){
 function renderReports(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Reports cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales || !state.loaded.items || !state.loaded.customers || !state.loaded.invoices){ host.append(h('p',{class:'empty'},'Loading reports…')); return; }
-  host.append(h('div',{class:'chips'}, PERIODS.map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rperiod===k),onclick:()=>{ state.rperiod = k; renderList(); }}, l))));
-  const start = periodStart(state.rperiod);
-  const sales = state.sales.filter(s=>new Date(s.at).getTime()>=start);
+  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
+  host.append(rangeChips(state.rrange, renderList));
+  const b = rangeBounds(state.rrange);
+  if (state.rview==='shipping'){ renderShipping(b); return; }
+  const sales = state.sales.filter(s=>inBounds(s.at, b));
   const owed = round2(allInvoices().filter(v=>!v.paid).reduce((a,v)=>a+v.balance,0));
-  if (!sales.length){ host.append(h('p',{class:'empty'},'No sales in this period.')); return; }
+  if (!sales.length){ host.append(h('p',{class:'empty'},'No sales in these dates.')); return; }
   const rev = round2(sales.reduce((a,s)=>a+(s.total||0),0));
   const cost = sales.reduce((a,s)=>a+(s.unitCost||0)*(s.qty||0),0);
   const profit = round2(rev-cost); const units = sales.reduce((a,s)=>a+(s.qty||0),0);
   const orders = new Set(sales.map(invKey)).size;
   host.append(h('div',{class:'sum'}, stat(money(rev),'revenue'), stat(money(profit),(rev>0 ? Math.round(profit/rev*100) : 0)+'% profit margin'), stat(fmtN(units),'units sold')));
   host.append(h('div',{class:'sum'}, stat(String(orders),'orders'), stat(money(round2(orders ? rev/orders : 0)),'average order'), stat(money(owed),'unpaid, all time')));
-  if (state.rperiod==='7' || state.rperiod==='30'){
-    const n = state.rperiod==='7' ? 7 : 30; const days = []; const d0 = new Date(); d0.setHours(0,0,0,0);
-    for (let i=n-1;i>=0;i--){ const d = new Date(d0); d.setDate(d.getDate()-i); days.push({t:d.getTime(), v:0}); }
-    for (const s of sales){ const t = new Date(s.at); t.setHours(0,0,0,0); const e = days.find(x=>x.t===t.getTime()); if (e) e.v += s.total||0; }
-    const mx = Math.max(1, ...days.map(x=>x.v));
-    host.append(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 8px'},'Revenue by day'),
-      h('div',{class:'days'}, days.map(x=>h('i',{style:'height:'+Math.max(2, Math.round(x.v/mx*100))+'%',title:new Date(x.t).toLocaleDateString()+': '+money(round2(x.v))}))),
-      h('div',{class:'meta',style:'justify-content:space-between'}, h('span',{}, fmtDate(days[0].t)), h('span',{}, fmtDate(days[n-1].t)))));
-  }
+  const bk = buckets(sales.map(s=>({t:new Date(s.at).getTime(), v:s.total||0})), b);
+  if (bk.rows.length>1) host.append(bucketChart('Revenue', bk, v=>money(round2(v))));
   const stockCost = round2(state.items.reduce((a,i)=>a+(i.qty>0 ? i.qty*(i.cost||0) : 0),0));
   const stockRetail = round2(state.items.reduce((a,i)=>a+(i.qty>0 ? i.qty*(i.price||0) : 0),0));
   host.append(h('div',{class:'sum'}, stat(money(stockCost),'stock at cost'), stat(money(stockRetail),'stock at Small price'), stat(money(round2(stockRetail-stockCost)),'potential profit')));
@@ -1458,6 +1671,26 @@ function renderReports(){
   host.append(barBlock('Top customers', aggBy(sales, s=>s.customerId||'none', s=>s.customerName||'No customer').slice(0,8), e=>e.orders.size+' order'+(e.orders.size===1?'':'s')+' · profit '+money(round2(e.rev-e.cost))));
   host.append(barBlock('Sales by customer type', aggBy(sales, s=>{ if (!s.customerId) return 'none'; const c = custMap[s.customerId]; return c ? (c.type||'notset') : 'gone'; }, (s,k)=>k==='none' ? 'No customer' : k==='gone' ? 'Deleted customers' : k==='notset' ? 'Type not set' : ctypeLabel(k)), prof));
 }
+// Shipping charged to customers, by the date of each order.
+function renderShipping(b){
+  const orders = allInvoices().filter(v=>inBounds(v.first.at, b));
+  if (!orders.length){ host.append(h('p',{class:'empty'},'No orders in these dates.')); return; }
+  const shipOfInv = v => round2(num(invMeta(v.key).shipping));
+  const charged = orders.filter(v=>shipOfInv(v)>0);
+  const total = round2(charged.reduce((a,v)=>a+shipOfInv(v),0));
+  host.append(h('div',{class:'sum'}, stat(money(total),'shipping charged'), stat(String(charged.length),'orders with shipping'), stat(money(charged.length ? round2(total/charged.length) : 0),'average per order')));
+  host.append(h('p',{class:'hint',style:'margin:-4px 2px 10px'}, (orders.length-charged.length)+' of '+orders.length+' orders in these dates had no shipping charge.'));
+  if (!charged.length) return;
+  const bk = buckets(charged.map(v=>({t:new Date(v.first.at).getTime(), v:shipOfInv(v)})), b);
+  if (bk.rows.length>1) host.append(bucketChart('Shipping charged', bk, v=>money(round2(v))));
+  const per = bk.rows.filter(x=>x.n>0).reverse();
+  host.append(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'}, bk.byDay ? 'Per day' : 'Per month'),
+    per.map(x=>h('div',{class:'hrow2'}, h('span',{}, x.label), h('span',{class:'meta',style:'margin:0'}, x.n+' order'+(x.n===1?'':'s')), h('b',{}, money(round2(x.v)))))));
+  host.append(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Orders with shipping'),
+    charged.slice(0,100).map(v=>h('button',{class:'att',type:'button',onclick:()=>openInvoice(v.key)},
+      h('span',{class:'attl'}, h('span',{}, v.customerName || 'No customer'), h('small',{}, v.no+' · '+fmtDate(v.first.at))), h('span',{class:'attv'}, money(shipOfInv(v))), h('span',{class:'attc','aria-hidden':'true'},'›')))));
+}
+
 
 /* ---------- scanner ---------- */
 let onSheetClose = null;
@@ -2202,7 +2435,12 @@ function updateCartBar(){
   syncCartButtons();
 }
 function drawCart(){ if (cartHost && cartHost.isConnected) cartHost.replaceChildren(cartPanel(cartHost.id==='cartDock')); updateCartBar(); }
-function addCustomLine(){ state.cart.lines.push({uid:++state.cart.uid, custom:true, id:null, name:'', cost:'', qty:'1', priceVal:'', touched:true, level:'auto', size:''}); drawCart(); }
+function addCustomLine(){
+  state.cart.lines.push({uid:++state.cart.uid, custom:true, id:null, name:'', cost:'', qty:'1', priceVal:'', touched:true, level:'auto', size:''}); drawCart();
+  const names = cartHost ? cartHost.querySelectorAll('.cline.custom input[type=text]') : [];
+  const el = names[names.length-1];
+  if (el){ el.focus({preventScroll:true}); el.scrollIntoView({block:'center', behavior:'smooth'}); }
+}
 function addToCart(it){
   if (!(it.qty>0)){ toast('This item is sold out.'); return; }
   const sn = isSized(it);
@@ -2246,8 +2484,8 @@ function cartPanel(withTitle){
       nm.addEventListener('input', ()=>{ ln.name = nm.value; }); cost.addEventListener('input', ()=>{ ln.cost = cost.value; });
       qty.addEventListener('input', ()=>{ ln.qty = qty.value; recalc(); }); price.addEventListener('input', ()=>{ ln.priceVal = price.value; recalc(); });
       refs.set(ln.uid, {price:{set value(v){}}, total});
-      return h('div',{class:'cline'},
-        h('div',{style:'display:flex;justify-content:space-between;gap:8px;align-items:flex-start'}, h('div',{}, h('span',{class:'sku'},'CUSTOM'), ' ', h('b',{},'Custom item')),
+      return h('div',{class:'cline custom'},
+        h('div',{style:'display:flex;justify-content:space-between;gap:8px;align-items:flex-start'}, h('div',{}, h('b',{},'Custom item')),
           h('button',{class:'icon-btn',type:'button','aria-label':'Remove custom item',onclick:()=>{ C.lines.splice(C.lines.indexOf(ln),1); drawCart(); }},'×')),
         field('Item name', nm),
         h('div',{class:'grid2'}, field('Quantity', qty), field('Price each ($)', price)),
@@ -2282,6 +2520,7 @@ function cartPanel(withTitle){
     h('div',{style:'display:flex;justify-content:space-between;align-items:center'}, h('div',{class:'hh',style:'margin:0'},'Items'), h('button',{class:'btn',type:'button',style:'padding:6px 12px',onclick:addCustomLine},'+ Custom item')),
     C.lines.length > 1 ? h('div',{}, h('div',{class:'lbl'},'Set price level for all items'), h('div',{class:'chips lvchips'}, [['auto','Auto'],['small','Small'],['medium','Medium'],['large','Large']].map(([k,l])=>h('button',{class:'chip',type:'button',onclick:()=>{ C.lines.forEach(x=>{ x.level = k; x.touched = false; }); drawCart(); }}, l)))) : null,
     ...(lines.length ? lines : [h('p',{class:'empty',style:'padding:14px 0'},'Cart is empty. Tap Add to cart on any item.')]),
+    lines.length ? h('button',{class:'btn addline',type:'button',onclick:addCustomLine},'+ Add custom item') : null,
     h('div',{class:'grid2',style:'margin-top:10px'}, field('Shipping ($)', ship), field('Note', note)),
     subEl, err, btn);
   recalc();
@@ -3165,41 +3404,60 @@ function renderCustomers(){
   })));
 }
 
+const saleMatches = (s, q) => !q || [s.name, s.sku, s.size, s.customerName, invNumber(invKey(s)), s.note].some(v=>String(v||'').toLowerCase().includes(q));
 function renderSales(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Sales cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales){ host.append(h('p',{class:'empty'},'Loading sales…')); return; }
-  const list = state.sales.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at)));
-  if (!list.length){ host.append(h('p',{class:'empty'},'No sales yet. Tap Sell on an item to record one and take it out of stock.')); return; }
+  if (!state.sales.length){ host.append(h('p',{class:'empty'},'No sales yet. Tap Sell on an item to record one and take it out of stock.')); return; }
+  host.append(rangeChips(state.srange, ()=>{ state.slimit = 0; renderList(); }));
+  host.append(h('div',{class:'chips'}, [['orders','By order'],['lines','Every sale']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.sview===k),onclick:()=>{ state.sview = k; state.slimit = 0; renderList(); }}, l))));
+  const b = rangeBounds(state.srange), q = state.sq.trim().toLowerCase();
+  const list = state.sales.filter(s=>inBounds(s.at, b) && saleMatches(s, q)).sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  const cost = showCost();
   const units = list.reduce((a,s)=>a+(s.qty||0),0);
   const rev = list.reduce((a,s)=>a+(s.total||0),0);
   const profit = list.reduce((a,s)=>a+(s.total||0)-(s.unitCost||0)*(s.qty||0),0);
-  const cost = showCost();
-  host.append(h('div',{class:'sum'}, stat(String(units),'units sold'), stat(money(rev),'revenue'), cost ? stat(money(profit),'profit') : null));
+  const nOrders = new Set(list.map(invKey)).size;
+  host.append(h('div',{class:'sum'}, stat(money(rev),'revenue'), stat(fmtN(units),'units sold'), cost ? stat(money(profit),'profit') : stat(String(nOrders),'orders')));
+  host.append(h('div',{class:'meta',style:'margin:-2px 2px 10px;justify-content:space-between'},
+    h('span',{}, rangeLabel(state.srange)+(q ? ' · matching “'+state.sq.trim()+'”' : '')+' · '+nOrders+' order'+(nOrders===1?'':'s')),
+    list.length ? h('button',{class:'linkbtn',type:'button',onclick:()=>{ const day = new Date().toISOString().slice(0,10); saveCsv('sales-'+day+'.csv', [['Date','Time','Invoice','Item','SKU','Size','Quantity','Unit price','Total','Customer','Custom item']].concat(list.map(s=>{ const d = new Date(s.at); return [localDay(s.at), d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}), invNumber(invKey(s)), s.name, skuText(s), s.size||'', s.qty, s.unitPrice, s.total, s.customerName||'', s.custom ? 'yes' : '']; }))); }},'Download CSV') : null));
+  if (!list.length){ host.append(h('p',{class:'empty'}, q ? 'No sales match that search in these dates.' : 'No sales in these dates.')); return; }
+  const limit = state.slimit || 150;
+  const more = n => n > limit ? h('button',{class:'btn',type:'button',style:'width:100%;margin-top:10px',onclick:()=>{ state.slimit = limit + 150; renderList(); }},'Show more ('+fmtN(n-limit)+' left)') : null;
+  if (state.sview==='lines'){
+    host.append(h('div',{class:'olist'}, list.slice(0,limit).map(x=>h('button',{class:'sline',type:'button',onclick:()=>openInvoice(invKey(x))},
+      h('span',{class:'main'}, h('span',{class:'name',style:'display:block'}, x.qty+' × '+lineName(x)),
+        h('span',{class:'meta',style:'display:flex'}, h('span',{}, fmtDateTime(x.at)), h('span',{}, x.customerName || 'No customer'), h('span',{}, invNumber(invKey(x))), x.custom ? h('span',{class:'tbadge'},'Custom') : (skuText(x) ? h('span',{class:'sku'}, skuText(x)) : null))),
+      h('span',{class:'qty'}, h('b',{style:'font-size:16px'}, money(x.total)), h('span',{}, money(x.unitPrice)+' each'))))), more(list.length));
+    return;
+  }
   const orders = new Map();
   for (const x of list){ const k = invKey(x); const o = orders.get(k) || {key:k, at:'', name:'', lines:[], total:0, units:0, cost:0}; if (String(x.at)>o.at) o.at = String(x.at); if (!o.name && x.customerName) o.name = x.customerName; o.lines.push(x); o.total += x.total||0; o.units += x.qty||0; o.cost += (x.unitCost||0)*(x.qty||0); orders.set(k,o); }
   const rows = [...orders.values()].sort((a,b)=>b.at.localeCompare(a.at));
   const open = state.openOrders || (state.openOrders = new Set());
-  host.append(h('div',{class:'panel'}, rows.map(o=>{
+  host.append(h('div',{class:'panel'}, rows.slice(0,limit).map(o=>{
     const isOpen = open.has(o.key);
     return h('div',{class:'row ordcard'},
       h('button',{class:'ordhead',type:'button','aria-expanded':String(isOpen),onclick:()=>{ if (open.has(o.key)) open.delete(o.key); else open.add(o.key); renderList(); }},
         h('span',{class:'ordchev'+(isOpen ? ' open' : ''),'aria-hidden':'true'},'▸'),
         h('span',{class:'main'}, h('span',{class:'name',style:'display:block'}, o.name || 'No customer'),
-          h('span',{class:'meta',style:'display:flex'}, h('span',{}, invNumber(o.key)), h('span',{}, fmtDate(o.at)), h('span',{}, o.lines.length+' item'+(o.lines.length===1 ? '' : 's')+' · '+fmtN(o.units)+' unit'+(o.units===1 ? '' : 's')))),
+          h('span',{class:'meta',style:'display:flex'}, h('span',{}, invNumber(o.key)), h('span',{}, fmtDateTime(o.at)), h('span',{}, o.lines.length+' item'+(o.lines.length===1 ? '' : 's')+' · '+fmtN(o.units)+' unit'+(o.units===1 ? '' : 's')))),
         h('span',{class:'qty'}, h('b',{style:'font-size:17px'}, money(o.total)), cost ? h('span',{}, money(o.total-o.cost)+' profit') : null)),
       isOpen ? h('div',{class:'ordlines'},
         o.lines.slice().sort((a,b)=>String(a.at).localeCompare(String(b.at))).map(x=>h('div',{class:'ordline'},
           h('div',{class:'r1'},
             h('div',{class:'main'}, h('div',{class:'name'}, x.qty+' × '+lineName(x)),
-              h('div',{class:'meta'}, h('span',{class:'sku'}, x.sku), x.note ? h('span',{}, x.note) : null, cost ? h('span',{}, 'cost '+money(x.unitCost||0)+' each') : null)),
+              h('div',{class:'meta'}, h('span',{}, fmtDateTime(x.at)), skuText(x) ? h('span',{class:'sku'}, skuText(x)) : null, x.note ? h('span',{}, x.note) : null, cost ? h('span',{}, 'cost '+money(x.unitCost||0)+' each') : null)),
             h('div',{class:'qty'}, h('b',{style:'font-size:16px'}, money(x.total)), h('span',{}, money(x.unitPrice)+' each'), cost ? h('span',{}, money((x.total||0)-(x.unitCost||0)*(x.qty||0))+' profit') : null)),
           h('div',{class:'acts'}, state.isAdmin && cost ? h('button',{class:'btn',type:'button',onclick:()=>openSaleCost(x)},'Edit cost') : null, h('button',{class:'btn',type:'button',onclick:()=>undoSale(x)},'Undo')))),
         h('div',{class:'acts',style:'margin-top:8px'}, h('button',{class:'btn primary',type:'button',onclick:()=>openInvoice(o.key)},'Invoice'))) : null);
-  })));
+  })), more(rows.length));
 }
 
+
 function undoSale(s){
-  confirmSheet('Undo sale','Undo this sale of '+s.qty+' × '+s.sku+'? The units go back into stock.','Undo sale',()=>write(async()=>{
+  confirmSheet('Undo sale','Undo this sale of '+s.qty+' × '+(skuText(s)||lineName(s))+'?'+(s.itemId ? ' The units go back into stock.' : ''),'Undo sale',()=>write(async()=>{
     const baseSpent = s.customerId ? Math.max(0, spentBy(s.customerId) - (s.total||0)) : 0;
     await state.db.doc('sales/'+s.id).delete();
     const it = state.items.find(x=>x.id===s.itemId);
@@ -3260,6 +3518,9 @@ function renderTab(){
     view.append(h('div',{class:'toolrow'}, state.isAdmin ? h('button',{class:'btn'+(state.hideCost?' primary':''),type:'button','aria-pressed':String(state.hideCost),onclick:()=>{ state.hideCost = !state.hideCost; try { localStorage.setItem('ss_hidecost', state.hideCost ? '1' : '0'); } catch(e){} renderTab(); }}, state.hideCost ? 'Costs hidden · Show' : 'Hide costs') : null, h('button',{class:'btn',type:'button',onclick:openPriceList},'Price list'), h('button',{class:'btn',type:'button',onclick:openLabelsSheet},'Print labels'), h('button',{class:'btn',type:'button',onclick:openDeadStock},'Dead stock'), state.isAdmin ? h('button',{class:'btn',type:'button',onclick:openBringIn},'Bring in stock') : null));
   } else if (state.tab==='customers'){
     view.append(h('div',{class:'searchrow'}, h('input',{class:'search',type:'search',placeholder:'Search customers',value:state.cq,autocomplete:'off','aria-label':'Search customers',oninput:e=>{ state.cq = e.target.value; renderList(); }}), h('select',{class:'sortsel','aria-label':'Sort customers',onchange:e=>{ state.csort = e.target.value; renderList(); }}, [['name','Name A–Z'],['spent','Most spent'],['recent','Latest order']].map(([v,l])=>{ const o = h('option',{value:v},l); if (state.csort===v) o.selected = true; return o; }))));
+  }
+  else if (state.tab==='sales'){
+    view.append(h('div',{class:'searchrow'}, h('input',{class:'search',type:'search',placeholder:'Search customer, item, SKU or invoice #',value:state.sq,autocomplete:'off','aria-label':'Search sales',oninput:e=>{ state.sq = e.target.value; state.slimit = 0; renderList(); }})));
   }
   else if (state.tab==='orders'){
     view.append(h('div',{class:'searchrow'}, h('input',{class:'search',type:'search',placeholder:'Search invoice, customer or tracking',value:state.oq,autocomplete:'off','aria-label':'Search orders',oninput:e=>{ state.oq = e.target.value; renderList(); }})));

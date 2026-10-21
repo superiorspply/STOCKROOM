@@ -183,6 +183,10 @@ try {
   check(await P.getByRole('button', {name:'+ Another size'}).count() === 0, 'Another size hides once every size is in the cart');
   await P.locator('.cline select').nth(1).selectOption('11');
   check(await szs() === '9:2,11:2', 'changing a line to a size already in the cart merges them (' + await szs() + ')');
+  const qbox = P.locator('.cline').first().getByLabel('Quantity');
+  await qbox.click(); await qbox.hover(); await P.mouse.wheel(0, -300); await P.waitForTimeout(150);
+  const stillFocused = await qbox.evaluate(el => document.activeElement === el);
+  check(!stillFocused && await qbox.inputValue() === '2', 'scrolling the mouse over a quantity lets go of the box, so the wheel cannot change it');
   await P.locator('.sheet select').first().selectOption({label:'Jamie Rivera (@jamie)'});
   await P.getByRole('button', {name:'Create invoice'}).click();
   await P.getByRole('heading', {name:/^Invoice INV-0005/}).waitFor({timeout:10000});

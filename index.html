@@ -566,6 +566,8 @@ function openSheet(title, body, opts){
   if (!(opts && opts.noFocus)){ const f = sheet.querySelector('input:not([type=checkbox]),select,textarea'); if (f) f.focus(); }
 }
 function closeSheet(){ if (onSheetClose){ const f = onSheetClose; onSheetClose = null; try { f(); } catch(e){} } $('#modalRoot').replaceChildren(); document.body.classList.remove('locked'); }
+// The mouse wheel scrolls the page instead of changing a number box (quantity, price) under the cursor.
+document.addEventListener('wheel', e=>{ const t = e.target; if (t instanceof HTMLInputElement && t.type==='number' && document.activeElement===t) t.blur(); }, {passive:true});
 document.addEventListener('keydown', e=>{ if (e.key==='Escape') closeSheet(); });
 function field(label, input, hint){ return h('label',{class:'field'}, h('span',{class:'lbl'},label), input, hint ? h('span',{class:'hint'},hint) : null); }
 function confirmSheet(title, text, actionLabel, onYes){

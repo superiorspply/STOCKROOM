@@ -193,6 +193,34 @@ try {
   const left = await P.evaluate(async () => { const db = await window.claude.use('db'); const d = await db.doc('items/s1').get(); return JSON.stringify([d.data().qty, d.data().sizes]); });
   check(left === '[2,{"10":1,"11":1}]', 'invoice takes each size out of stock (' + left + ')');
   await P.locator('.sheet').getByRole('button', {name:'Close'}).first().click();
+  check(await P.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('stockroom_cart_')).length) === 0, 'a finished invoice clears the saved cart');
+
+  // 9. The cart is kept on this device, so a refresh doesn't empty it.
+  await P.locator('[data-cartid="w1"]').click();
+  await P.locator('#cartBar').click();
+  await P.locator('.sheet select').first().selectOption({label:'Jamie Rivera (@jamie)'});
+  await P.getByLabel('Note').fill('Pick up Friday');
+  await P.reload(); await P.locator('#status.live').waitFor({timeout:10000});
+  await P.getByRole('tab', {name:'Inventory'}).click();
+  await P.locator('#cartBar.has').waitFor({timeout:5000});
+  await P.locator('#cartBar').click();
+  check(await P.getByLabel('Note').inputValue() === 'Pick up Friday' && (await P.locator('.sheet select').first().inputValue()) === 'c1' && (await P.locator('.cline').count()) === 1, 'the cart, customer and note are still there after a refresh');
+  await P.getByRole('button', {name:'Remove Widget'}).click(); await P.locator('.sheet').getByRole('button', {name:'Close'}).first().click();
+
+  // 10. A newer published version shows a Refresh bar. The published page stamps js/backend.js?v=<commit>.
+  let live = 'aaaa1111';
+  await P.route(/\?check=/, route => route.fulfill({contentType:'text/html', body:'<script src="js/backend.js?v=' + live + '"></script>'}));
+  await P.evaluate(() => { document.querySelector('script[src*="js/backend.js"]').setAttribute('src', 'js/backend.js?v=aaaa1111'); window.oldPage = true; });
+  await P.evaluate(() => window.dispatchEvent(new Event('focus'))); await P.waitForTimeout(500);
+  check(await P.locator('#updateBar').count() === 0, 'no Refresh bar while the site is up to date');
+  live = 'bbbb2222';
+  await P.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await P.locator('#updateBar').waitFor({timeout:5000});
+  check((await P.locator('#updateBar').textContent()).includes('A new version of Stockroom is ready'), 'a newer version shows the Refresh bar');
+  await P.locator('#updateBar').getByRole('button', {name:'Refresh'}).click();
+  await P.locator('#status.live').waitFor({timeout:10000});
+  check(await P.evaluate(() => !window.oldPage), 'Refresh reloads the page');
+  await P.unroute(/\?check=/);
   await ctx.setDefaultTimeout(5000);
   const ctxD = await context(b, {viewport:{width:1280, height:800}}), D = await page(ctxD, errs);
   await D.goto(SITE); await D.getByLabel('Email').fill(`orders-${run}@shop.test`); await D.getByLabel('Password').fill('correct-horse-9');

@@ -53,6 +53,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .linkbtn{border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:13px;font-weight:500;cursor:pointer;background:var(--surface)}
 
 main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
+#updateBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top,0px));z-index:60;display:flex;align-items:center;gap:10px;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:8px 8px 8px 14px;font-size:14px;box-shadow:0 10px 28px rgba(0,0,0,.5);max-width:calc(100vw - 32px)}
+#updateBar button{border:0;border-radius:999px;background:var(--accent);color:#fff;font:inherit;font-weight:600;padding:6px 14px;cursor:pointer}
+#updateBar .ub-x{background:transparent;color:var(--muted);padding:6px 8px;font-size:18px;line-height:1}
 .banner{max-width:720px;margin:0 auto;padding:0 16px}
 .banner div{background:var(--accent-soft);color:var(--ink);border:1px solid rgba(229,25,43,.35);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:8px}
 
@@ -474,6 +477,22 @@ function toast(msg){
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(()=>{ t.hidden = true; }, 3200);
 }
+// When a newer version of the site is published, offer a refresh. The published page stamps
+// js/backend.js?v=<commit>, so compare ours with the one on the server.
+function watchForUpdate(){
+  let shown = false;
+  const check = async ()=>{
+    const mine = ((document.querySelector('script[src*="js/backend.js"]')||{}).src || '').match(/[?&]v=(\w+)/);
+    if (!mine || shown || document.hidden) return;   // no version stamp when run locally
+    try {
+      const t = await (await fetch(location.pathname+'?check='+Date.now(), {cache:'no-store'})).text();
+      const v = t.match(/js\/backend\.js\?v=(\w+)/);
+      if (v && v[1]!==mine[1]){ shown = true; document.body.append(h('div',{id:'updateBar',role:'status'}, h('span',{},'A new version of Stockroom is ready.'), h('button',{type:'button',onclick:()=>{ saveCart(); location.reload(); }},'Refresh'), h('button',{type:'button',class:'ub-x','aria-label':'Later',onclick:e=>e.target.closest('#updateBar').remove()},'×'))); }
+    } catch(e){}
+  };
+  setInterval(check, 5*60*1000); document.addEventListener('visibilitychange', check); window.addEventListener('focus', check);
+}
+watchForUpdate();
 function setBanner(msg){
   const b = $('#banner'); b.replaceChildren();
   if (msg) b.append(h('div',{},msg));
@@ -2435,7 +2454,12 @@ function inCartQty(id){ return state.cart.lines.filter(l=>l.id===id).reduce((a,l
 function syncCartButtons(){
   document.querySelectorAll('[data-cartid]').forEach(b=>{ const n = inCartQty(b.dataset.cartid); b.textContent = n ? 'In cart ('+n+') +' : 'Add to cart'; b.classList.toggle('incart', n>0); });
 }
+// The cart is kept on this device for each company, so a refresh or a site update doesn't empty it.
+const cartKey = () => 'stockroom_cart_'+((window.STOCKROOM && STOCKROOM.company && STOCKROOM.company.id) || '');
+function saveCart(){ if (!state.cartLoaded) return; try { const C = state.cart; if (C.lines.length || C.cid || C.ship || C.note) localStorage.setItem(cartKey(), JSON.stringify(C)); else localStorage.removeItem(cartKey()); } catch(e){} }
+function loadCart(){ state.cartLoaded = true; try { const c = JSON.parse(localStorage.getItem(cartKey()) || 'null'); if (c && Array.isArray(c.lines)) Object.assign(state.cart, c); } catch(e){} }
 function updateCartBar(){
+  saveCart();
   const bar = document.getElementById('cartBar');
   if (bar){ const n = cartUnits(); bar.replaceChildren(h('span',{class:'cbn'}, String(n)), h('span',{}, n ? 'Cart · '+money(cartSub()) : 'Cart is empty'), h('span',{'aria-hidden':'true'},'›')); bar.classList.toggle('has', n>0); }
   syncCartButtons();
@@ -2476,6 +2500,7 @@ function openSizePicker(it){
 }
 function cartPanel(withTitle){
   const C = state.cart; const refs = new Map();
+  if (state.loaded.items) C.lines = C.lines.filter(l=>l.custom || cartItem(l));
   const sel = h('select',{}, h('option',{value:''},'Choose a customer'),
     sortedCustomers().map(c=>h('option',{value:c.id}, c.name + (c.handle ? ' ('+c.handle+')' : ''))),
     h('option',{value:'__new'},'+ New customer…'));
@@ -2548,6 +2573,7 @@ function cartPanel(withTitle){
     h('div',{class:'grid2',style:'margin-top:10px'}, field('Shipping ($)', ship), field('Note', note)),
     subEl, err, btn);
   recalc();
+  form.addEventListener('input', saveCart); form.addEventListener('change', saveCart);
   form.addEventListener('submit', async e=>{
     e.preventDefault(); err.textContent = '';
     if (!sel.value){ err.textContent = 'Choose a customer.'; sel.focus(); return; }
@@ -2916,7 +2942,9 @@ function matchItem(name, code){
 function openBringIn(){
   const scanStatus = h('p',{class:'hint',style:'margin:0 0 10px'},'Checking invoice scanning…');
   const scanFile = h('input',{type:'file',accept:'image/*,application/pdf',style:'display:none'});
-  const scanBtn = h('button',{class:'btn primary',type:'button',disabled:true,onclick:()=>scanFile.click()},'Scan an invoice');
+  const camFile = h('input',{type:'file',accept:'image/*',capture:'environment',style:'display:none'});
+  const camBtn = h('button',{class:'btn primary',type:'button',disabled:true,onclick:()=>camFile.click()},'Take a photo');
+  const scanBtn = h('button',{class:'btn',type:'button',disabled:true,onclick:()=>scanFile.click()},'Choose photo or PDF');
   const sheetFile = h('input',{type:'file',accept:'.csv,.xlsx,.xls,.tsv,text/csv',style:'display:none'});
   const sheetStatus = h('p',{class:'hint',style:'margin:0 0 10px'});
   let api = null;
@@ -2924,14 +2952,15 @@ function openBringIn(){
     api = a; const s = await a.status();
     if (!s.enabled){ scanStatus.textContent = 'Invoice scanning is not turned on for '+BRAND()+' yet. Ask Stockroom support to turn it on.'; return; }
     scanStatus.textContent = s.used+' of '+s.limit+' scans used this month. Photos and PDFs work.';
-    scanBtn.disabled = s.used >= s.limit;
+    scanBtn.disabled = camBtn.disabled = s.used >= s.limit;
   }).catch(()=>{ scanStatus.textContent = 'Invoice scanning is not available right now.'; });
-  scanFile.addEventListener('change', async ()=>{
-    const f = scanFile.files && scanFile.files[0]; scanFile.value = ''; if (!f || !api) return;
-    scanBtn.disabled = true; scanStatus.textContent = 'Reading the invoice. This can take up to a minute…';
+  const onScan = async input=>{
+    const f = input.files && input.files[0]; input.value = ''; if (!f || !api) return;
+    scanBtn.disabled = camBtn.disabled = true; scanStatus.textContent = 'Reading the invoice. This can take up to a minute…';
     try { const inv = await api.scan(f); openInvoiceReview(inv, 'invoice'); }
-    catch(e){ scanStatus.textContent = (e && e.message) || 'Could not read that invoice.'; scanBtn.disabled = false; }
-  });
+    catch(e){ scanStatus.textContent = (e && e.message) || 'Could not read that invoice.'; scanBtn.disabled = camBtn.disabled = false; }
+  };
+  scanFile.addEventListener('change', ()=>onScan(scanFile)); camFile.addEventListener('change', ()=>onScan(camFile));
   sheetFile.addEventListener('change', async ()=>{
     const f = sheetFile.files && sheetFile.files[0]; sheetFile.value = ''; if (!f) return;
     sheetStatus.textContent = 'Opening the file…';
@@ -2944,7 +2973,7 @@ function openBringIn(){
   openSheet('Bring in stock', h('div',{},
     h('div',{class:'bkp'}, h('b',{},'Scan an invoice'),
       h('p',{style:'margin:4px 0 8px;font-size:13px;color:var(--muted)'},'Take a photo of a supplier invoice or pick its PDF. Claude reads the lines, then you check them before anything is saved.'),
-      scanStatus, scanBtn, scanFile),
+      scanStatus, h('div',{style:'display:flex;gap:8px;flex-wrap:wrap'}, camBtn, scanBtn), scanFile, camFile),
     h('div',{class:'bkp',style:'margin-top:10px'}, h('b',{},'Import a spreadsheet'),
       h('p',{style:'margin:4px 0 8px;font-size:13px;color:var(--muted)'},'A CSV or Excel file from your supplier. You pick which columns hold the name, quantity and cost.'),
       sheetStatus, h('button',{class:'btn',type:'button',onclick:()=>sheetFile.click()},'Choose a file'), sheetFile)), {noFocus:true});
@@ -3888,6 +3917,7 @@ renderStatus(); renderTab();
     renderStatus(); renderTab();
     if (!db){ state.status = 'offline'; renderStatus(); setBanner('Could not connect to your data, so nothing you enter will be kept. Check your connection and reload the page.'); renderList(); return; }
     state.db = db;
+    loadCart(); if (state.cart.lines.length || state.cart.cid) drawCart();
     try { const can = user ? await user.can('data.write') : null; if (can===false){ state.canWrite = false; setBanner('You have view-only access. You can look at the data but not change it.'); } } catch(e){}
     state.status = 'live'; renderStatus();
     subscribe();

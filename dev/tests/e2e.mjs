@@ -226,7 +226,8 @@ try {
   await A.getByRole('tab', {name:'Inventory'}).click();
   await A.getByRole('button', {name:'Bring in stock'}).click();
   await A.getByText(/0 of 3 scans used this month/).waitFor({timeout:8000});
-  await A.locator('.sheet input[type=file][accept*=pdf]').setInputFiles(PHOTO);
+  check(await A.getByRole('button', {name:'Take a photo'}).isEnabled(), 'Take a photo is ready when scanning is on');
+  await A.locator('.sheet input[type=file][capture=environment]').setInputFiles(PHOTO);
   await A.getByRole('heading', {name:'Check the invoice'}).waitFor({timeout:15000});
   await A.waitForTimeout(300); await A.screenshot({path:'/tmp/stockroom-review.png'});
   const claudeReq = await A.evaluate(async () => (await fetch('http://localhost:54321/mock-anthropic/last')).json());

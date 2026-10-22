@@ -26,6 +26,7 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Access and the monthly limit are in `scan_settings` / `scan_log`, changed only by support via `support_set_scan`.
   - The dev server runs the function as-is against a stand-in Claude API at `/mock-anthropic`.
 - Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
+- The cart is saved in `localStorage` per company (`stockroom_cart_<company id>`), so a refresh keeps it. `watchForUpdate` compares the page's `js/backend.js?v=<commit>` stamp with the live one and shows a Refresh bar when a newer version is published.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 
 ## Rules

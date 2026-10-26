@@ -34,6 +34,7 @@ function verify(tok){
   return c.exp && c.exp < Date.now() / 1000 ? null : c;
 }
 export const ANON_KEY = sign({role:'anon', iss:'dev', exp:4102444800});
+const SERVICE_KEY = sign({role:'service_role', iss:'dev', exp:4102444800});
 
 /* ---------- database ---------- */
 function psql(sql, db = DB){
@@ -230,7 +231,9 @@ async function edgeFunction(name){
   const dir = path.join(ROOT, 'dev', '.functions'); fs.mkdirSync(dir, {recursive:true});
   const file = path.join(dir, name + '.mts'); fs.writeFileSync(file, src);
   Object.assign(process.env, {SUPABASE_URL:'http://localhost:' + API_PORT, SUPABASE_ANON_KEY:ANON_KEY,
-    ANTHROPIC_API_KEY:'test-key', ANTHROPIC_BASE_URL:'http://localhost:' + API_PORT + '/mock-anthropic'});
+    ANTHROPIC_API_KEY:'test-key', ANTHROPIC_BASE_URL:'http://localhost:' + API_PORT + '/mock-anthropic', SUPABASE_SERVICE_ROLE_KEY:SERVICE_KEY,
+    TIKTOK_APP_KEY:TT.key, TIKTOK_APP_SECRET:TT.secret, TIKTOK_AUTH_URL:'http://localhost:' + API_PORT + '/mock-tiktok/authorize?service_id=42',
+    TIKTOK_API_BASE:'http://localhost:' + API_PORT + '/mock-tiktok/api', TIKTOK_AUTH_BASE:'http://localhost:' + API_PORT + '/mock-tiktok/auth'});
   let handler = null;
   globalThis.Deno = {serve: h => { handler = h; }, env: {get: k => process.env[k]}};
   await import(file + '?t=' + Date.now());
@@ -249,6 +252,38 @@ async function mockClaude(req, res, url){
   if (fail) return send(res, 500, {type:'error', error:{type:'api_error', message:'boom'}});
   send(res, 200, {id:'msg_mock', type:'message', role:'assistant', model:lastClaudeRequest.body.model, stop_reason:'end_turn', stop_sequence:null,
     content:[{type:'text', text:JSON.stringify(MOCK_INVOICE)}], usage:{input_tokens:1800, output_tokens:420}});
+}
+
+// A stand-in TikTok Shop: an authorize page that sends you straight back with a code, token endpoints,
+// and signed finance endpoints. Statement transactions only answer on 202309, so the function's
+// fallback from newer versions is exercised.
+const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[]};
+export const MOCK_TIKTOK = {
+  statements:[{id:'S1', statement_time:Math.floor(Date.now() / 1000) - 2 * 86400, settlement_amount:'61.20', revenue_amount:'100.00', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0', payment_status:'PAID', currency:'USD'}],
+  transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'61.20', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0',
+    revenue_breakdown:{subtotal_before_discount_amount:'100.00', seller_discount_amount:'0'},
+    fee_tax_breakdown:{fee:{platform_commission_amount:'-6.00', transaction_fee_amount:'-2.90', affiliate_commission_amount:'-20.00', sfp_service_fee_amount:'-1.90'}},
+    shipping_cost_breakdown:{actual_shipping_fee_amount:'-8.00'}}]};
+async function mockTikTok(req, res, url){
+  const p = url.pathname.replace('/mock-tiktok', ''), q = Object.fromEntries(url.searchParams);
+  TT.calls.push(p);
+  if (p === '/authorize') return send(res, 302, '', {location:`http://localhost:${SITE_PORT}/?code=good-code&state=${encodeURIComponent(q.state || '')}`});
+  if (p.startsWith('/auth/api/v2/token/')){
+    if (q.app_key !== TT.key || q.app_secret !== TT.secret) return send(res, 200, {code:36004004, message:'invalid app'});
+    if (p.endsWith('/get') && q.auth_code !== 'good-code') return send(res, 200, {code:36004001, message:'invalid auth code'});
+    const now = Math.floor(Date.now() / 1000);
+    return send(res, 200, {code:0, message:'success', data:{access_token:'TTACCESS', access_token_expire_in:now + 7 * 86400, refresh_token:'TTREFRESH', refresh_token_expire_in:now + 365 * 86400, seller_name:'Mock Seller'}});
+  }
+  const path = p.replace('/api', '');
+  const signed = Object.keys(q).filter(k => k !== 'sign' && k !== 'access_token').sort().map(k => k + q[k]).join('');
+  const want = crypto.createHmac('sha256', TT.secret).update(TT.secret + path + signed + TT.secret).digest('hex');
+  if (q.sign !== want || q.app_key !== TT.key) return send(res, 200, {code:106001, message:'invalid sign'});
+  if (req.headers['x-tts-access-token'] !== 'TTACCESS') return send(res, 200, {code:105002, message:'invalid access token'});
+  if (path === '/authorization/202309/shops') return send(res, 200, {code:0, data:{shops:[{id:'7001', name:'Mock TikTok Shop', cipher:'CIPHER1', region:'US'}]}});
+  if (q.shop_cipher !== 'CIPHER1') return send(res, 200, {code:106011, message:'shop_cipher missing'});
+  if (path === '/finance/202309/statements') return send(res, 200, {code:0, data:{statements:MOCK_TIKTOK.statements, next_page_token:''}});
+  if (/^\/finance\/202309\/statements\/S1\/statement_transactions$/.test(path)) return send(res, 200, {code:0, data:{transactions:MOCK_TIKTOK.transactions, next_page_token:''}});
+  send(res, 200, {code:40006, message:'api version not supported'});
 }
 
 /* ---------- PostgREST + site ---------- */
@@ -293,6 +328,8 @@ const api = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/storage/v1')) return await storage(req, res, url);
     if (url.pathname.startsWith('/functions/v1/')) return await functions(req, res, url);
     if (url.pathname.startsWith('/mock-anthropic')) return await mockClaude(req, res, url);
+    if (url.pathname === '/mock-tiktok/calls') return send(res, 200, TT.calls);
+    if (url.pathname.startsWith('/mock-tiktok')) return await mockTikTok(req, res, url);
     send(res, 404, {message:'not found'});
   } catch(e){ console.error(e); send(res, 500, {message:String(e.message || e)}); }
 });

@@ -31,7 +31,9 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Tokens live in `tiktok_links`, which only the service role can read.
   - It is switched on per company in `tiktok_settings`, changed only by support via `support_set_tiktok`. The Reports chip is hidden unless `tiktok_status().enabled`.
   - The UI shows every `*_amount` field, nested ones included, so new fee types appear without code changes.
-  - Each transaction's amounts are flattened into `amounts` (`tiktok_flat`) by a trigger on write. Older lines are filled in batches by `tiktok_prepare`, which the page calls before the report. The report totals come from the `tiktok_report` RPC, so the browser never downloads every order line. Only one order's lines are fetched when it is opened.
+  - Each transaction's amounts are flattened into `amounts` (`tiktok_flat`) by a trigger on write.
+  - `tiktok_prepare` adds new or changed lines (`rolled_up = false`) into running hourly totals in `tiktok_hourly`, 5000 at a time. The page calls it until it returns 0, then calls `tiktok_report`, which sums the hourly rows. So report speed doesn't depend on shop size. Re-sent unchanged lines keep their totals; changed or deleted lines are taken out by triggers.
+  - Only one order's lines are fetched when it is opened.
   - The dev server has a stand-in TikTok at `/mock-tiktok`. The test is `dev/tests/tiktok.mjs`.
 - Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
 - The cart is saved in `localStorage` per company (`stockroom_cart_<company id>`), so a refresh keeps it. `watchForUpdate` compares the page's `js/backend.js?v=<commit>` stamp with the live one and shows a Refresh bar when a newer version is published.

@@ -18,6 +18,8 @@ begin
   perform set_config('request.jwt.claim.sub', u, false);
   perform set_config('request.jwt.claims', json_build_object('sub', u, 'email', email)::text, false);
 end $$;
+-- TikTok revenue in the hourly totals the caller can see.
+create function t.revenue() returns numeric language sql as $$ select coalesce(sum(total), 0) from public.tiktok_hourly where k = '|revenue_amount' $$;
 grant execute on all functions in schema t to authenticated, anon;
 
 insert into auth.users values
@@ -239,8 +241,22 @@ select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 select t.ok(public.tiktok_prepare((select v::uuid from ids where k='A')) = 0, 'preparing fills older TikTok lines');
 reset role; select t.ok((select amounts is not null from public.tiktok_transactions where id = 'T1'), 'TikTok amounts are filled'); set role authenticated;
 select t.ok((select (r->>'order_count')::int = 1 and r->'lines' @> '[{"path":"","key":"revenue_amount","total":20}]' from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'the TikTok report adds up the order lines');
+reset role; update public.tiktok_transactions set data = data where id = 'T1'; set role authenticated;
+select public.tiktok_prepare((select v::uuid from ids where k='A'));
+select t.ok(t.revenue() = 20, 'TikTok sending a line again unchanged keeps the totals');
+reset role; update public.tiktok_transactions set data = '{"revenue_amount":"25"}' where id = 'T1'; set role authenticated;
+select t.ok(t.revenue() = 0, 'a changed line is taken out of the totals');
+select public.tiktok_prepare((select v::uuid from ids where k='A'));
+select t.ok(t.revenue() = 25, 'and added back with its new amounts');
+reset role; insert into public.tiktok_transactions(company_id, id, at, data) select v::uuid, 'T2', now(), '{"revenue_amount":"5"}' from ids where k = 'A'; set role authenticated;
+select public.tiktok_prepare((select v::uuid from ids where k='A'));
+reset role; delete from public.tiktok_transactions where id = 'T2'; set role authenticated;
+select t.ok(t.revenue() = 25, 'a deleted line is taken out of the totals');
+reset role; update public.tiktok_transactions set data = '{"revenue_amount":"20"}' where id = 'T1'; set role authenticated;
+select public.tiktok_prepare((select v::uuid from ids where k='A'));
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
 select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'viewers get an empty TikTok report');
+select t.ok(t.count('select * from public.tiktok_hourly') = 0, 'viewers cannot read TikTok totals');
 select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
 select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'another company gets an empty TikTok report for A');
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');

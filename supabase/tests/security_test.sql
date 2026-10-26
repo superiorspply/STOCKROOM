@@ -240,6 +240,7 @@ select t.fails($$select public.tiktok_prepare((select v::uuid from ids where k='
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 select t.ok(public.tiktok_prepare((select v::uuid from ids where k='A')) = 0, 'preparing fills older TikTok lines');
 reset role; select t.ok((select amounts is not null from public.tiktok_transactions where id = 'T1'), 'TikTok amounts are filled'); set role authenticated;
+select t.ok(jsonb_array_length(public.tiktok_payouts((select v::uuid from ids where k='A'), null, null)) = 1, 'owner can load TikTok payouts');
 select t.ok((select (r->>'order_count')::int = 1 and r->'lines' @> '[{"path":"","key":"revenue_amount","total":20}]' from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'the TikTok report adds up the order lines');
 reset role; update public.tiktok_transactions set data = data where id = 'T1'; set role authenticated;
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
@@ -256,6 +257,7 @@ reset role; update public.tiktok_transactions set data = '{"revenue_amount":"20"
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load the TikTok report');
+select t.fails($$select public.tiktok_payouts((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load TikTok payouts');
 select t.ok(t.count('select * from public.tiktok_hourly') = 0, 'viewers cannot read TikTok totals');
 select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load the TikTok report for A');

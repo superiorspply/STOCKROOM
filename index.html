@@ -1859,25 +1859,28 @@ function renderTikTok(b){
       })();
       redraw();
     }
-    // Automatic: pull new data when the page opens, at most once an hour.
-    if (!ttSyncing && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false);
+    // Automatic: pull new data when the page opens, at most once an hour. It starts once the totals below are
+    // added up: both write the same order lines, and running together made each wait on the other until timeout.
+    const autoSync = ()=>{ if (!ttSyncing && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false); };
     const body = h('div',{}, h('p',{class:'empty'},'Adding up your TikTok numbers…'));
     box.replaceChildren(head, body); failBox = body;
     // Order lines pulled before the report migration are prepared in batches the first time.
     // New or changed order lines are added into the running totals in batches. A batch that runs past the
     // database's time limit is retried smaller; quick ones let the next batch grow.
     let lim = 1000, first = null, left = 1;
-    while (left > 0 && box.isConnected){
-      const t0 = Date.now();
-      try { left = await tt.prepare(lim); }
-      catch(e){
-        if (!/timeout/i.test(e.message) || lim <= 50) throw new Error('Could not add TikTok orders to your totals: '+e.message);
-        lim = Math.max(50, Math.floor(lim/2)); continue;
+    try {
+      while (left > 0 && box.isConnected){
+        const t0 = Date.now();
+        try { left = await tt.prepare(lim); }
+        catch(e){
+          if (!/timeout/i.test(e.message) || lim <= 50) throw new Error('Could not add TikTok orders to your totals: '+e.message);
+          lim = Math.max(50, Math.floor(lim/2)); continue;
+        }
+        if (first===null) first = left + lim;
+        if (Date.now()-t0 < 2500 && lim < 5000) lim *= 2;
+        if (left > 0) body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.min(99, Math.round((1 - left/first)*100)))+'% done. The first time takes longest.'));
       }
-      if (first===null) first = left + lim;
-      if (Date.now()-t0 < 2500 && lim < 5000) lim *= 2;
-      if (left > 0) body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.min(99, Math.round((1 - left/first)*100)))+'% done. The first time takes longest.'));
-    }
+    } finally { autoSync(); }
     if (!box.isConnected) return;
     // One step at a time, so a slow or failing step is named (with how long it took).
     const step = async (label, fn)=>{ const t0 = Date.now(); try { return await fn(); } catch(e){ throw new Error('Could not load '+label+' (after '+((Date.now()-t0)/1000).toFixed(1)+'s): '+e.message); } };

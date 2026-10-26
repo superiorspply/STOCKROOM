@@ -1831,7 +1831,7 @@ function renderTikTok(b){
     box.replaceChildren(head, body);
     // Order lines pulled before the report migration are prepared in batches the first time.
     for (let left = await tt.prepare(), first = left; left > 0 && box.isConnected; left = await tt.prepare())
-      body.replaceChildren(h('p',{class:'empty'}, 'Preparing your TikTok data for faster reports… '+Math.max(0, Math.round((1 - left/first)*100))+'% done. This happens once.'));
+      body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.round((1 - left/first)*100))+'% done. The first time takes longest.'));
     if (!box.isConnected) return;
     const [rep, stmts] = await Promise.all([tt.report(b.from, b.to), tt.statements(b.from, b.to)]);
     if (!box.isConnected) return;
@@ -1849,12 +1849,12 @@ function renderTikTok(b){
     out.push(ttPaidCard(secs, paid));
     if (stmts.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts ('+stmts.length+')'),
       stmts.slice(0,60).map(s=>h('div',{class:'hrow2'}, h('span',{}, fmtDate(s.statement_time), h('small',{class:'meta',style:'display:block;margin:0'}, String(s.data.payment_status||'').replace(/_/g,' ').toLowerCase())), h('b',{}, money(round2(ttNum(s.data.settlement_amount))))))));
-    out.push(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Orders ('+fmtN(rep.order_count)+')'),
+    out.push(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Recent orders'), h('p',{class:'hint',style:'margin:0 0 4px'}, fmtN(rep.order_count)+' TikTok order line'+(rep.order_count==1?'':'s')+' in these dates (sales, refunds and adjustments).'),
       rep.orders.map(o=>{ const r = num(o.revenue), p = num(o.paid);
         return h('button',{class:'att',type:'button',onclick:()=>openTikTokOrder(tt, o.id)},
           h('span',{class:'attl'}, h('span',{}, 'Order '+o.id), h('small',{}, fmtDate(o.at)+' · sold '+money(round2(r))+(r>0 ? ' · '+Math.round((r-p)/r*100)+'% to TikTok and costs' : ''))),
           h('span',{class:'attv'}, money(round2(p))), h('span',{class:'attc','aria-hidden':'true'},'›')); }),
-      rep.order_count>rep.orders.length ? h('p',{class:'hint'}, 'Showing the newest '+rep.orders.length+'. Pick fewer dates to see others.') : null));
+      rep.order_count>rep.orders.length ? h('p',{class:'hint'}, 'Showing the newest '+rep.orders.length+' orders. Pick fewer dates to see others.') : null));
     body.replaceChildren(...out);
   }).catch(e=>{ if (box.isConnected) box.replaceChildren(h('p',{class:'empty'}, (e && e.message) || 'TikTok Shop is not available right now.')); });
 }

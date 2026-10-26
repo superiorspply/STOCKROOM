@@ -32,6 +32,7 @@ try {
   await P.getByText('Mock TikTok Shop').first().waitFor({timeout:15000});
   check(!/code=|state=/.test(P.url()), 'the code from TikTok is removed from the address bar');
   check(true, 'connecting through TikTok comes back to Reports, connected');
+  await P.getByText(/^Updated /).first().waitFor({timeout:15000});
   await P.getByText('paid to you').first().waitFor({timeout:15000});
   const sum = await P.locator('.sum').first().textContent();
   check(sum.includes('$100.00') && sum.includes('$61.20') && sum.includes('39%'), 'totals show revenue, payout and what TikTok kept (' + sum + ')');
@@ -49,6 +50,7 @@ try {
   const calls = await (await fetch(API + '/mock-tiktok/calls')).json();
   check(calls.some(c => c.includes('/finance/202501/')) && calls.some(c => c.includes('/finance/202309/statements/S1/statement_transactions')), 'falls back to an older TikTok API version when a newer one is not available');
   await P.getByRole('button', {name:/Order 5770001/}).click();
+  await P.locator('.sheet').getByText('Creator commissions').waitFor({timeout:8000});
   const sheet = await P.locator('.sheet').textContent();
   check(sheet.includes('Shipping label cost') && sheet.includes('-$8.00') && sheet.includes('Creator commissions'), 'an order shows each money line, by section');
   await P.screenshot({path:'/tmp/stockroom-tiktok-order.png'});

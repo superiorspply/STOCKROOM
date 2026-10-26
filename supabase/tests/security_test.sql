@@ -232,6 +232,12 @@ select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 select public.tiktok_disconnect((select v::uuid from ids where k='A'));
 select t.ok((select not connected from public.tiktok_status((select v::uuid from ids where k='A'))), 'owner can disconnect TikTok');
 select t.ok(t.count('select * from public.tiktok_transactions') = 1, 'disconnecting keeps the data already pulled');
+select t.ok((select (r->>'order_count')::int = 1 and r->'lines' @> '[{"path":"","key":"revenue_amount","total":20}]' from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'the TikTok report adds up the order lines');
+select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
+select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'viewers get an empty TikTok report');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'another company gets an empty TikTok report for A');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 
 -- Signed out.
 reset role; set role anon;

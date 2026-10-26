@@ -255,6 +255,22 @@ reset role; delete from public.tiktok_transactions where id = 'T2'; set role aut
 select t.ok(t.revenue() = 25, 'a deleted line is taken out of the totals');
 reset role; update public.tiktok_transactions set data = '{"revenue_amount":"20"}' where id = 'T1'; set role authenticated;
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
+reset role;
+insert into public.tiktok_statements(company_id, id, statement_time, data) select v::uuid, 'S9', '2026-01-02 10:00+00', '{}' from ids where k = 'A';
+insert into public.tiktok_transactions(company_id, id, statement_id, at, data) select v::uuid, 'T9', 'S9', '2025-12-01 10:00+00', '{"type":"Early Settlement recovery","adjustment_amount":"-7","settlement_amount":"-7"}' from ids where k = 'A';
+select t.ok((select at = '2026-01-02 10:00+00' from public.tiktok_transactions where id = 'T9'), 'a TikTok line counts on its statement date, like TikTok''s own reports');
+-- A line pulled before statement dates were used is moved to its statement date by tiktok_prepare.
+alter table public.tiktok_transactions disable trigger tiktok_fill_amounts;
+update public.tiktok_transactions set at = '2025-12-01 10:00+00', stamped = false, rolled_up = false where id = 'T9';
+alter table public.tiktok_transactions enable trigger tiktok_fill_amounts;
+set role authenticated;
+select t.ok(public.tiktok_prepare((select v::uuid from ids where k='A')) = 0, 'preparing moves older TikTok lines to their statement date');
+reset role;
+select t.ok((select at = '2026-01-02 10:00+00' and stamped from public.tiktok_transactions where id = 'T9'), 'the older line now has its statement date');
+select t.ok((select sum(total) = -7 from public.tiktok_hourly where k = 'adjustment_by_type.early_settlement_recovery|adjustment_amount' and hour = '2026-01-02 10:00+00'), 'adjustments are added up by their type');
+delete from public.tiktok_transactions where id = 'T9'; delete from public.tiktok_statements where id = 'S9';
+select t.ok(not exists (select 1 from public.tiktok_hourly where k like 'adjustment_by_type%' and total <> 0), 'a deleted adjustment is taken out of the totals');
+set role authenticated;
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load the TikTok report');
 select t.fails($$select public.tiktok_payouts((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load TikTok payouts');

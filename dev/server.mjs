@@ -259,11 +259,15 @@ async function mockClaude(req, res, url){
 // fallback from newer versions is exercised.
 const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[]};
 export const MOCK_TIKTOK = {
-  statements:[{id:'S1', statement_time:Math.floor(Date.now() / 1000) - 2 * 86400, settlement_amount:'61.20', revenue_amount:'100.00', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0', payment_status:'PAID', currency:'USD'}],
-  transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'61.20', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0',
+// Shaped like TikTok's: top-level totals add up to the payout; the breakdowns are their detail; supplementary
+// components repeat amounts for reference. S2 is a payout TikTok sends no lines for.
+  statements:[{id:'S1', statement_time:Math.floor(Date.now() / 1000) - 2 * 86400, settlement_amount:'61.20', revenue_amount:'100.00', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0', payment_status:'PAID', currency:'USD'},
+    {id:'S2', statement_time:Math.floor(Date.now() / 1000) - 1 * 86400, settlement_amount:'-15.00', revenue_amount:'0', payment_status:'PAID', currency:'USD'}],
+  transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'61.20', fee_tax_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0',
     revenue_breakdown:{subtotal_before_discount_amount:'100.00', seller_discount_amount:'0'},
     fee_tax_breakdown:{fee:{platform_commission_amount:'-6.00', transaction_fee_amount:'-2.90', affiliate_commission_amount:'-20.00', sfp_service_fee_amount:'-1.90'}},
-    shipping_cost_breakdown:{actual_shipping_fee_amount:'-8.00'}, sku_list:[{sku_id:'1', product_name:'Runner'}], note:'x'.repeat(500), currency:'USD'}]};
+    shipping_cost_breakdown:{actual_shipping_fee_amount:'-8.00', supplementary_component:{fbm_shipping_cost_amount:'-8.00'}},
+    supplementary_component:{customer_payment_amount:'107.50'}, sku_list:[{sku_id:'1', product_name:'Runner'}], note:'x'.repeat(500), currency:'USD'}]};
 async function mockTikTok(req, res, url){
   const p = url.pathname.replace('/mock-tiktok', ''), q = Object.fromEntries(url.searchParams);
   TT.calls.push(p);
@@ -282,7 +286,8 @@ async function mockTikTok(req, res, url){
   if (path === '/authorization/202309/shops') return send(res, 200, {code:0, data:{shops:[{id:'7001', name:'Mock TikTok Shop', cipher:'CIPHER1', region:'US'}]}});
   if (q.shop_cipher !== 'CIPHER1') return send(res, 200, {code:106011, message:'shop_cipher missing'});
   if (path === '/finance/202309/statements') return send(res, 200, {code:0, data:{statements:MOCK_TIKTOK.statements, next_page_token:''}});
-  if (/^\/finance\/202309\/statements\/S1\/statement_transactions$/.test(path)) return send(res, 200, {code:0, data:{transactions:MOCK_TIKTOK.transactions, next_page_token:''}});
+  const st = /^\/finance\/202309\/statements\/(\w+)\/statement_transactions$/.exec(path);
+  if (st) return send(res, 200, {code:0, data:{transactions:st[1] === 'S1' ? MOCK_TIKTOK.transactions : [], next_page_token:''}});
   send(res, 200, {code:40006, message:'api version not supported'});
 }
 

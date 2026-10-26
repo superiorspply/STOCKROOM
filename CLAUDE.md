@@ -31,6 +31,7 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Tokens live in `tiktok_links`, which only the service role can read.
   - It is switched on per company in `tiktok_settings`, changed only by support via `support_set_tiktok`. The Reports chip is hidden unless `tiktok_status().enabled`.
   - The UI shows every `*_amount` field, nested ones included, so new fee types appear without code changes.
+  - Lines count on their statement's date (the fill trigger sets `at`), as TikTok's own Finance reports do. Section totals come from TikTok's top-level totals (revenue + fee_tax + shipping_cost + adjustment + reserve = settlement); the nested breakdowns are their detail. `supplementary_component` fields repeat other amounts, so they are shown "for reference" and not added up. Non-order lines' adjustments are also keyed by type (`adjustment_by_type.<type>`), e.g. Early Settlement recovery.
   - Each transaction's amounts are flattened into `amounts` (`tiktok_flat`) by a trigger on write.
   - `tiktok_prepare` adds new or changed lines (`rolled_up = false`) into running hourly totals in `tiktok_hourly`, 5000 at a time. The page calls it until it returns 0, then calls `tiktok_report`, which sums the hourly rows. So report speed doesn't depend on shop size. Re-sent unchanged lines keep their totals; changed or deleted lines are taken out by triggers.
   - Only one order's lines are fetched when it is opened.

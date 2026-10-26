@@ -1726,7 +1726,7 @@ function renderShipping(b){
 const TT_LABELS = {platform_commission:'TikTok commission', referral_fee:'Referral fee', transaction_fee:'Payment processing fee', affiliate_commission:'Creator (affiliate) commission',
   affiliate_partner_commission:'Affiliate partner commission', affiliate_ads_commission:'Affiliate ads commission', actual_shipping_fee:'Shipping label cost', shipping_cost:'Shipping cost',
   sfp_service_fee:'Shipped by TikTok fee', customer_paid_shipping_fee:'Shipping paid by customer', subtotal_before_discount:'Subtotal before discounts', seller_discount:'Your discounts',
-  refund_subtotal_before_discount:'Refunds', seller_discount_refund:'Discount refunds', revenue:'Revenue', fee:'Fees', fee_tax:'Fees and tax', settlement:'Paid to you', adjustment:'Adjustments',
+  refund_subtotal_before_discount:'Refunds', seller_discount_refund:'Discount refunds', revenue:'Revenue', reserve:'Reserve', customer_payment:'Customer payment', fee:'Fees', fee_tax:'Fees and tax', settlement:'Paid to you', adjustment:'Adjustments',
   net_sales:'Net sales', sales_tax:'Sales tax', platform_discount:'TikTok-funded discounts', live_specials_fee:'LIVE specials fee', voucher_xtra_service_fee:'Voucher Xtra fee',
   flash_sales_service_fee:'Flash sale fee', bonus_cashback_service_fee:'Cashback program fee', dynamic_commission:'Dynamic commission', cod_service_fee:'Cash on delivery fee'};
 const ttNum = v => v && typeof v==='object' ? num(v.amount ?? v.value) : num(v);
@@ -1741,37 +1741,63 @@ function ttAmounts(o, path, out){
   return out;
 }
 const ttTotals = recs => { const t = {}; for (const r of recs) for (const [k,v,g] of ttAmounts(r.data, '', [])) if (!g) t[k] = (t[k]||0)+v; return t; };
-// Sections the money lines are grouped into, in the order a payout is worked out.
-const TT_SECTIONS = [['sales','Sales','What customers paid, less discounts.'],['fees','TikTok fees','Commission, payment processing and program fees.'],
-  ['creator','Creator commissions','Paid to affiliates and creators who sold for you.'],['shipping','Shipping','Labels and fulfilment, and shipping customers paid.'],
-  ['refunds','Refunds','Money given back on returns and refunds.'],['tax','Taxes',''],['adjust','Adjustments','One-off charges and credits: penalties, corrections, reimbursements.'],
-  ['other','Other','Amounts TikTok sent that do not fit the sections above.']];
-function ttSection(k, path){
-  const s = (path+'.'+k).toLowerCase();
-  if (/refund|return/.test(k)) return 'refunds';
-  if (/affiliate|creator/.test(s)) return 'creator';
-  if (/shipping|logistic|sfp|fbt|delivery|fulfil/.test(s)) return 'shipping';
-  if (/adjust|penalt|compensat|reimburs|deduct/.test(s)) return 'adjust';
-  if (/fee|commission|charge/.test(k)) return 'fees';
-  if (/(^|_)(tax|vat|gst)(_|$)/.test(k)) return 'tax';
-  if (/revenue|subtotal|discount|sales|price/.test(s)) return 'sales';
-  if (/fee|commission/.test(s)) return 'fees';
+// Sections the money lines are grouped into, in the order a payout is worked out. TikTok's top-level totals
+// (revenue + fees and tax + shipping + adjustments + reserve) add up to the payout exactly, so each section's
+// total is TikTok's own total; the nested breakdown is shown as its detail.
+const TT_SECTIONS = [['sales','Sales','What customers paid, less discounts and refunds.'],['fees','TikTok fees','Commission, payment processing and program fees.'],
+  ['creator','Creator commissions','Paid to affiliates and creators who sold for you.'],['tax','Taxes','Sales tax collected and passed on, and tax on fees.'],
+  ['shipping','Shipping','Labels and fulfilment, less shipping customers paid.'],['adjust','Adjustments','One-off charges and credits. With early settlement, TikTok pays some orders early and takes it back ("recovery") when they settle, so the two mostly cancel out.'],
+  ['reserve','Reserve','Money TikTok held back or released.'],['other','Other','Amounts TikTok sent that do not fit the sections above.']];
+// Which section a top-level total, or the root of a nested breakdown, belongs to. null: for reference only.
+function ttRoot(name){
+  const s = name.toLowerCase();
+  if (/supplementary/.test(s)) return null;
+  if (/revenue/.test(s)) return 'sales';
+  if (/fee|tax/.test(s)) return 'fees';
+  if (/shipping/.test(s)) return 'shipping';
+  if (/adjust/.test(s)) return 'adjust';
+  if (/reserve/.test(s)) return 'reserve';
   return 'other';
 }
+// Fees and tax are one total at TikTok; split for reading.
+function ttFeeKind(k, path){
+  const s = (path.split('.').slice(1).concat(k).join('.')).toLowerCase();   // without the fee_tax_breakdown root
+  if (/affiliate|creator/.test(s)) return 'creator';
+  if (/(^|[._])(tax|vat|gst)([._]|$)/.test(s)) return 'tax';
+  return 'fees';
+}
 // Money lines grouped into sections. Takes summed lines [{path, key, total, n}] (path '' for top-level totals).
-// TikTok's detailed breakdown is used where it sends one; a top-level total stands in for a section that has
-// no detail. "Paid to you" is the result, so it is not a line.
+// Section totals come from TikTok's top-level totals; nested lines are their detail. "Supplementary" lines
+// (what the customer paid in all, duplicates of other lines) are returned apart as reference, not added up.
+// "Paid to you" is the result, so it is not a line.
 function ttSections(sums){
-  const nestedIn = new Set(sums.filter(a=>a.path).map(a=>ttSection(a.key, a.path)));
-  const m = new Map();
+  const tops = new Map(), detail = new Map(), ref = new Map();
+  const add = (m, id, o, v, n)=>{ const e = m.get(id) || Object.assign({v:0, n:0}, o); e.v += v; e.n += n; m.set(id, e); };
   for (const a of sums){
-    if (a.key==='settlement_amount') continue;
-    const sec = ttSection(a.key, a.path);
-    if (!a.path && nestedIn.has(sec)) continue;
-    const id = sec+'|'+a.key, e = m.get(id) || {sec, key:a.key, label:ttLabel(a.key), v:0, n:0}; e.v += num(a.total); e.n += num(a.n); m.set(id, e);
+    const v = num(a.total), n = num(a.n);
+    if (!a.path){
+      if (a.key==='settlement_amount') continue;
+      const sec = a.key==='fee_tax_amount' || a.key==='fee_amount' || a.key==='tax_amount' ? 'fees' : ttRoot(a.key.replace(/_amount$/,''));
+      if (sec) add(tops, sec, {}, v, n); else add(ref, a.key, {key:a.key, label:ttLabel(a.key)}, v, n);
+      continue;
+    }
+    const root = ttRoot(a.path.split('.')[0]), sec = root && /supplementary/i.test(a.path) ? null : root;
+    if (!sec){ add(ref, a.path+'|'+a.key, {key:a.key, label:ttLabel(a.key)}, v, n); continue; }
+    const kind = sec==='fees' ? ttFeeKind(a.key, a.path) : sec;
+    // Adjustments come split by their type (path "adjustment_by_type.<type>"); the type names the line.
+    const byType = /^adjustment_by_type\./.test(a.path), label = byType ? ttLabel(a.path.split('.').pop()) : ttLabel(a.key);
+    add(detail, kind+'|'+(byType ? a.path : a.key), {sec:kind, root:sec, key:a.key, label}, v, n);
   }
-  const lines = [...m.values()].filter(e=>Math.abs(e.v)>=0.005);
-  return TT_SECTIONS.map(([id,title,hint])=>{ const ls = lines.filter(e=>e.sec===id).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)); return {id, title, hint, lines:ls, total:ls.reduce((a,e)=>a+e.v,0)}; }).filter(x=>x.lines.length);
+  const lines = [...detail.values()];
+  // A section TikTok sent a total for but whose detail does not add up to it gets a line for the difference.
+  for (const [sec, t] of tops){
+    const gap = round2(t.v - lines.filter(e=>e.root===sec).reduce((a,e)=>a+e.v,0));
+    if (Math.abs(gap)>=0.01) lines.push({sec, root:sec, key:'', label:lines.some(e=>e.root===sec) ? 'Not itemized by TikTok' : ttLabel(sec==='fees' ? 'fee_tax' : sec==='sales' ? 'revenue' : sec==='shipping' ? 'shipping_cost' : sec==='adjust' ? 'adjustment' : sec), v:gap, n:t.n});
+  }
+  const shown = lines.filter(e=>Math.abs(e.v)>=0.005);
+  const secs = TT_SECTIONS.map(([id,title,hint])=>{ const ls = shown.filter(e=>e.sec===id).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)); return {id, title, hint, lines:ls, total:ls.reduce((a,e)=>a+e.v,0)}; }).filter(x=>x.lines.length);
+  secs.reference = [...ref.values()].filter(e=>Math.abs(e.v)>=0.005).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  return secs;
 }
 // The same summed lines, worked out in the browser for a few records (one order).
 function ttSums(recs){
@@ -1785,6 +1811,13 @@ function ttPaidCard(secs, paid){
   return h('div',{class:'row wide',style:'margin-bottom:10px'},
     h('div',{style:'display:flex;justify-content:space-between;align-items:baseline'}, h('div',{class:'hh',style:'margin:0'},'= Paid to you'), h('b',{style:'font-size:18px'}, money(round2(paid)))),
     Math.abs(gap)>=0.01 ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'TikTok\'s breakdown does not add up to the payout by '+money(Math.abs(gap))+(gap<0 ? ' (kept without a listed reason).' : ' (paid without a listed reason).')) : null);
+}
+// Lines TikTok sends for reference (what the customer paid in all, discounts shown another way). They repeat
+// amounts already in the sections, so they are not added up.
+function ttRefCard(lines){
+  return h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'For reference'),
+    h('p',{class:'hint',style:'margin:0 0 4px'},'Other figures TikTok sends. They repeat amounts already counted above, so they are not added up.'),
+    lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label), h('b',{}, money(round2(e.v))))));
 }
 // One section as a card: its lines, each with its share of revenue, and a subtotal.
 function ttSectionCard(sec, rev, perLine){
@@ -1856,13 +1889,24 @@ function renderTikTok(b){
     const top = k => num((rep.lines.find(l=>!l.path && l.key===k) || {}).total);
     const secs = ttSections(rep.lines), secTotal = id => (secs.find(x=>x.id===id) || {total:0}).total;
     const rev = rep.lines.some(l=>!l.path && l.key==='revenue_amount') ? top('revenue_amount') : secTotal('sales'), paid = top('settlement_amount');
-    out.push(h('div',{class:'sum'}, stat(money(round2(rev)),'customers paid (sales)'), stat(money(round2(paid)),'paid to you'), stat(rev>0 ? Math.round((rev-paid)/rev*100)+'%' : '–','kept by TikTok and costs')));
+    const costs = secTotal('fees') + secTotal('creator') + secTotal('shipping');
+    out.push(h('div',{class:'sum'}, stat(money(round2(rev)),'sales'), stat(money(round2(paid)),'paid to you'), stat(rev>0 ? Math.round(-costs/rev*100)+'%' : '–','of sales to fees and shipping')));
     out.push(h('div',{class:'sum'}, stat(money(round2(secTotal('fees'))),'TikTok fees'), stat(money(round2(secTotal('creator'))),'creator commissions'), stat(money(round2(secTotal('shipping'))),'shipping')));
     const bk = buckets(rep.days.map(d=>{ const [y,m,dd] = String(d.day).split('-').map(Number); return {t:new Date(y, m-1, dd).getTime(), v:num(d.paid)}; }), b);
     if (bk.rows.length>1) out.push(bucketChart('Paid to you', bk, v=>money(round2(v))));
     out.push(h('div',{class:'hh',style:'margin:14px 2px 8px'},'Breakdown: from sales to your payout'));
     secs.forEach(sec=>out.push(ttSectionCard(sec, rev, true)));
     out.push(ttPaidCard(secs, paid));
+    if (secs.reference.length) out.push(ttRefCard(secs.reference));
+    // Order lines count on their statement's date, so they add up to the payouts unless TikTok paid or took
+    // something it did not list as a line (or a payout's lines are still being pulled).
+    if (stmts.length){
+      const payouts = stmts.reduce((a,s)=>a+ttNum(s.data.settlement_amount),0), gap = round2(payouts - paid);
+      if (Math.abs(gap)>=1) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts compared with order lines'),
+        h('div',{class:'hrow2'}, h('span',{},'Paid on order lines'), h('b',{}, money(round2(paid)))),
+        h('div',{class:'hrow2'}, h('span',{}, 'Paid out without order lines', h('small',{class:'meta',style:'display:block;margin:0'},'In TikTok\'s payouts but not listed line by line, or still being pulled from TikTok.')), h('b',{style:gap<0 ? 'color:var(--bad)' : ''}, money(gap))),
+        h('div',{class:'hrow2'}, h('span',{},'Payouts in these dates'), h('b',{}, money(round2(payouts))))));
+    }
     if (stmts.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts ('+stmts.length+')'),
       stmts.slice(0,60).map(s=>h('div',{class:'hrow2'}, h('span',{}, fmtDate(s.statement_time), h('small',{class:'meta',style:'display:block;margin:0'}, String(s.data.payment_status||'').replace(/_/g,' ').toLowerCase())), h('b',{}, money(round2(ttNum(s.data.settlement_amount))))))));
     out.push(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Recent orders'), h('p',{class:'hint',style:'margin:0 0 4px'}, fmtN(rep.order_count)+' TikTok order line'+(rep.order_count==1?'':'s')+' in these dates (sales, refunds and adjustments).'),
@@ -1884,7 +1928,8 @@ async function openTikTokOrder(tt, key){
       h('div',{class:'sum'}, stat(money(round2(t.revenue_amount||0)),'revenue'), stat(money(round2(t.settlement_amount||0)),'paid to you')),
       recs.length>1 ? h('p',{class:'hint'}, recs.map(x=>String(x.data.type || 'transaction').replace(/_/g,' ').toLowerCase()+' on '+fmtDate(ttTime(x))).join(' · ')) : null,
       secs.map(sec=>ttSectionCard(sec, t.revenue_amount||0, false)),
-      ttPaidCard(secs, t.settlement_amount||0)));
+      ttPaidCard(secs, t.settlement_amount||0),
+      secs.reference.length ? ttRefCard(secs.reference) : null));
   } catch(e){ box.replaceChildren(h('p',{class:'empty'}, e.message)); }
 }
 

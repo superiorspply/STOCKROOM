@@ -35,13 +35,17 @@ try {
   await P.getByText(/^Updated /).first().waitFor({timeout:15000});
   await P.getByText('paid to you').first().waitFor({timeout:15000});
   const sum = await P.locator('.sum').first().textContent();
-  check(sum.includes('$100.00') && sum.includes('$61.20') && sum.includes('39%'), 'totals show sales, payout and the share to fees and shipping (' + sum + ')');
+  check(sum.includes('$100.00') && sum.includes('$46.20') && sum.includes('39%'), 'tiles show sales, the share to fees and shipping, and what TikTok\'s statements paid out (' + sum + ')');
   const card = async title => (await P.locator('.row.wide').filter({has:P.locator('.hh', {hasText:new RegExp('^' + title + '$')})}).first().textContent()) || '';
   const tab = async name => { await P.locator('.tttabs').getByRole('tab', {name, exact:true}).click(); };
   const overview = await card('From sales to your payout');
   check(overview.includes('$61.20') && !overview.includes('does not add up') && overview.includes('TikTok fees') && overview.includes('Shipping'), 'the overview adds the sections up to the payout (' + overview + ')');
   check((await card('Biggest costs')).includes('Creator (affiliate) commission'), 'the overview lists the biggest costs');
   check(await P.locator('.tttabs').getByRole('tab').count() >= 6, 'tabs jump to each part of the report');
+  const stc = await card('TikTok statement totals');
+  check(stc.includes('Total settlement') && stc.includes('$46.20') && stc.includes('Revenue') && stc.includes('$100.00'), 'TikTok\'s own statement totals are shown (' + stc + ')');
+  const chk = await card('Checked against TikTok');
+  check(chk.includes('1 of 2 payouts match their order lines to the cent') && chk.includes('no order lines'), 'each payout is checked against its order lines (' + chk + ')');
   await tab('TikTok fees');
   check((await card('TikTok fees')).includes('-$10.80') && (await card('TikTok fees')).includes('TikTok commission') && (await card('TikTok fees')).includes('Payment processing fee') && (await card('TikTok fees')).includes('Shipped by TikTok fee'), 'the TikTok fees tab shows each fee with a subtotal');
   await tab('Creator commissions');

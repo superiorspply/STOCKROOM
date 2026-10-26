@@ -301,21 +301,27 @@ const runtime = {
       finish: p => call({action:'finish', code:p.code, state:p.state}),
       sync: () => call({action:'sync'}),
       async disconnect(){ const {error} = await sb.rpc('tiktok_disconnect', {cid:S.company.id}); if (error) throw appError(error); },
-      // Payouts and order lines whose time falls in [from, to) (milliseconds).
-      async data(from, to){
-        const rows = async (table, col) => {
-          const out = [];
-          for (let i = 0; ; i += 1000){
-            let q = sb.from(table).select('*').eq('company_id', S.company.id).order(col, {ascending:false}).range(i, i + 999);
-            if (from > 0) q = q.gte(col, new Date(from).toISOString());
-            if (isFinite(to)) q = q.lt(col, new Date(to).toISOString());
-            const {data, error} = await q;
-            if (error) throw appError(error);
-            out.push(...data); if (data.length < 1000) return out;
-          }
-        };
-        const [statements, transactions] = await Promise.all([rows('tiktok_statements', 'statement_time'), rows('tiktok_transactions', 'at')]);
-        return {statements, transactions};
+      // Totals for the report, worked out in the database: every amount field summed, paid per day, newest orders.
+      async report(from, to){
+        const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
+        const {data, error} = await sb.rpc('tiktok_report', {cid:S.company.id, t_from:iso(from), t_to:iso(to), tz:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'});
+        if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'The TikTok report needs a database update. Run the latest TikTok migration in Supabase.' : error.message);
+        return data;
+      },
+      // Payouts whose time falls in [from, to) (milliseconds).
+      async statements(from, to){
+        let q = sb.from('tiktok_statements').select('id, statement_time, data').eq('company_id', S.company.id).order('statement_time', {ascending:false}).limit(500);
+        if (from > 0) q = q.gte('statement_time', new Date(from).toISOString());
+        if (isFinite(to)) q = q.lt('statement_time', new Date(to).toISOString());
+        const {data, error} = await q;
+        if (error) throw appError(error);
+        return data;
+      },
+      // Every money line of one order (or of one transaction with no order).
+      async order(key){
+        const {data, error} = await sb.from('tiktok_transactions').select('*').eq('company_id', S.company.id).or('order_id.eq.' + key + ',id.eq.' + key).order('at');
+        if (error) throw appError(error);
+        return data;
       }
     };
   },

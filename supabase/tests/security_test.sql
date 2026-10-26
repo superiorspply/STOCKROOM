@@ -245,6 +245,10 @@ select t.ok((select (r->>'order_count')::int = 1 and r->'lines' @> '[{"path":"",
 reset role; update public.tiktok_transactions set data = data where id = 'T1'; set role authenticated;
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
 select t.ok(t.revenue() = 20, 'TikTok sending a line again unchanged keeps the totals');
+reset role; update public.tiktok_transactions set data = data || '{"note":"sent again, stored slim"}' where id = 'T1';
+select t.ok((select rolled_up from public.tiktok_transactions where id = 'T1'), 'a line sent again with the same amounts stays in the totals (so syncs stay quick)');
+set role authenticated;
+select t.ok(t.revenue() = 20, 'and the totals are unchanged');
 reset role; update public.tiktok_transactions set data = '{"revenue_amount":"25"}' where id = 'T1'; set role authenticated;
 select t.ok(t.revenue() = 0, 'a changed line is taken out of the totals');
 select public.tiktok_prepare((select v::uuid from ids where k='A'));

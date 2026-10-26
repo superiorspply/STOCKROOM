@@ -210,16 +210,28 @@ async function sync(admin: any, link: any) {
       company_id: link.company_id, id: String(x.id ?? `${s.id}-${i}`), statement_id: s.id, order_id: String(x.order_id ?? ""),
       at: unixIso(x.order_create_time) || s.statement_time, data: slim(x),
     }));
-    for (let i = 0; i < txRows.length; i += 200) {
-      const { error } = await admin.from("tiktok_transactions").upsert(txRows.slice(i, i + 200));
-      if (error) throw new Fail(500, error.message);
-    }
+    await saveLines(admin, txRows);
     await admin.from("tiktok_statements").update({ transactions_synced_at: new Date().toISOString() }).eq("company_id", link.company_id).eq("id", s.id);
     done++; transactions += txRows.length;
   }
   // A round that got this far worked, so any earlier error is cleared; synced_at is set once nothing is left.
   await admin.from("tiktok_links").update(more ? { sync_error: null } : { synced_at: new Date().toISOString(), sync_error: null }).eq("company_id", link.company_id);
   return { statements: rows.length, synced: done, left: todo.length - done, transactions, more };
+}
+
+// Saves order lines in batches. Each line written updates the running totals, so a batch can run past the
+// database's time limit when it is busy (for example while the report page adds lines up); such a batch is
+// retried smaller after a moment.
+// deno-lint-ignore no-explicit-any
+async function saveLines(admin: any, rows: Record<string, unknown>[]) {
+  let size = 100;
+  for (let i = 0; i < rows.length;) {
+    const { error } = await admin.from("tiktok_transactions").upsert(rows.slice(i, i + size));
+    if (!error) { i += size; continue; }
+    if (!/timeout/i.test(error.message) || size <= 5) throw new Fail(500, error.message);
+    size = Math.max(5, Math.floor(size / 2));
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 // What Stockroom keeps of an order line: every "*_amount" field where it sits (the report and order detail use

@@ -308,9 +308,9 @@ const runtime = {
         return data || 0;
       },
       // Totals for the report, worked out in the database: every amount field summed, paid per day, newest orders.
-      async report(from, to){
+      async report(from, to, tz){
         const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
-        const {data, error} = await sb.rpc('tiktok_report', {cid:S.company.id, t_from:iso(from), t_to:iso(to), tz:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'});
+        const {data, error} = await sb.rpc('tiktok_report', {cid:S.company.id, t_from:iso(from), t_to:iso(to), tz:tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'});
         if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'The TikTok report needs a database update. Run the latest TikTok migration in Supabase.' : error.message);
         return data;
       },
@@ -318,7 +318,10 @@ const runtime = {
       async statements(from, to){
         const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
         const r = await sb.rpc('tiktok_payouts', {cid:S.company.id, t_from:iso(from), t_to:iso(to)});
-        if (!r.error) return r.data.map(p => ({id:p.id, statement_time:p.statement_time, data:{settlement_amount:p.settlement_amount, payment_status:p.payment_status}}));
+        // {count, totals, list}; each payout's data holds its amounts, plus its order lines as Stockroom has them.
+        if (!r.error && !Array.isArray(r.data)) return {count:r.data.count, totals:r.data.totals, list:r.data.list.map(p => ({id:p.id, statement_time:p.statement_time,
+          data:Object.assign({payment_status:p.payment_status}, p.amounts), lines:p.lines, linesPaid:Number(p.lines_paid), pulled:p.pulled}))};
+        if (!r.error) return {count:r.data.length, totals:null, list:r.data.map(p => ({id:p.id, statement_time:p.statement_time, data:{settlement_amount:p.settlement_amount, payment_status:p.payment_status}}))};
         if (!/function|schema cache/i.test(r.error.message)) throw appError(r.error);
         // Before the payouts migration: read the table directly.
         let q = sb.from('tiktok_statements').select('id, statement_time, data').eq('company_id', S.company.id).order('statement_time', {ascending:false}).limit(500);
@@ -326,7 +329,7 @@ const runtime = {
         if (isFinite(to)) q = q.lt('statement_time', new Date(to).toISOString());
         const {data, error} = await q;
         if (error) throw appError(error);
-        return data;
+        return {count:data.length, totals:null, list:data};
       },
       // Every money line of one order (or of one transaction with no order).
       async order(key){

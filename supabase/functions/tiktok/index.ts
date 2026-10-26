@@ -180,7 +180,7 @@ async function sync(admin: any, link: any) {
     });
     const txRows = tx.map((x, i) => ({
       company_id: link.company_id, id: String(x.id ?? `${s.id}-${i}`), statement_id: s.id, order_id: String(x.order_id ?? ""),
-      at: unixIso(x.order_create_time) || s.statement_time, data: x,
+      at: unixIso(x.order_create_time) || s.statement_time, data: slim(x),
     }));
     for (let i = 0; i < txRows.length; i += 200) {
       const { error } = await admin.from("tiktok_transactions").upsert(txRows.slice(i, i + 200));
@@ -189,8 +189,23 @@ async function sync(admin: any, link: any) {
     await admin.from("tiktok_statements").update({ transactions_synced_at: new Date().toISOString() }).eq("company_id", link.company_id).eq("id", s.id);
     done++; transactions += txRows.length;
   }
-  if (!more) await admin.from("tiktok_links").update({ synced_at: new Date().toISOString(), sync_error: null }).eq("company_id", link.company_id);
+  // A round that got this far worked, so any earlier error is cleared; synced_at is set once nothing is left.
+  await admin.from("tiktok_links").update(more ? { sync_error: null } : { synced_at: new Date().toISOString(), sync_error: null }).eq("company_id", link.company_id);
   return { statements: rows.length, synced: done, left: todo.length - done, transactions, more };
+}
+
+// What Stockroom keeps of an order line: every "*_amount" field where it sits (the report and order detail use
+// those) and the line's own short top-level fields (type, ids, times). TikTok's full record is several KB per
+// line; for a busy shop that filled the database, so lists and other nested detail are left out.
+// deno-lint-ignore no-explicit-any
+function slim(o: any, top = true): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o || {})) {
+    if (/_amount$/.test(k)) out[k] = v;
+    else if (v && typeof v === "object" && !Array.isArray(v)) { const s = slim(v, false); if (Object.keys(s).length) out[k] = s; }
+    else if (top && (typeof v === "number" || typeof v === "boolean" || (typeof v === "string" && v.length <= 200))) out[k] = v;
+  }
+  return out;
 }
 
 // Runs fn with each API version until one works; remembers nothing, so a retired version costs one failed call.

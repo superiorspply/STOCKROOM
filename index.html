@@ -1827,7 +1827,7 @@ function renderTikTok(b){
       redraw();
     }
     // Automatic: pull new data when the page opens, at most once an hour.
-    if (!ttSyncing && !st.error && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false);
+    if (!ttSyncing && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false);
     const body = h('div',{}, h('p',{class:'empty'},'Adding up your TikTok numbers…'));
     box.replaceChildren(head, body); failBox = body;
     // Order lines pulled before the report migration are prepared in batches the first time.

@@ -263,7 +263,7 @@ export const MOCK_TIKTOK = {
   transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'61.20', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0',
     revenue_breakdown:{subtotal_before_discount_amount:'100.00', seller_discount_amount:'0'},
     fee_tax_breakdown:{fee:{platform_commission_amount:'-6.00', transaction_fee_amount:'-2.90', affiliate_commission_amount:'-20.00', sfp_service_fee_amount:'-1.90'}},
-    shipping_cost_breakdown:{actual_shipping_fee_amount:'-8.00'}}]};
+    shipping_cost_breakdown:{actual_shipping_fee_amount:'-8.00'}, sku_list:[{sku_id:'1', product_name:'Runner'}], note:'x'.repeat(500), currency:'USD'}]};
 async function mockTikTok(req, res, url){
   const p = url.pathname.replace('/mock-tiktok', ''), q = Object.fromEntries(url.searchParams);
   TT.calls.push(p);

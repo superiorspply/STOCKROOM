@@ -269,7 +269,15 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .hchips{margin:8px 0 0}
 .att{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:13px 4px;color:inherit;font:inherit;cursor:pointer}.panel .att:last-child{border-bottom:0}
 .attl{flex:1;min-width:0;display:flex;flex-direction:column}.attl small{color:var(--muted);font-size:12.5px;margin-top:1px}.attv{font-weight:700;font-size:16px}.attv.warn{color:var(--accent-text)}.attc{color:var(--muted);font-size:22px;line-height:1}
-.hrow2{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:11px 4px;border-bottom:1px solid var(--line)}.panel .hrow2:last-child{border-bottom:0}
+.hrow2{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:11px 4px;border-bottom:1px solid var(--line)}
+.ttwrap{min-width:0}.ttcard{margin-bottom:10px}.ttcard .hrow2{padding:7px 2px}.ttsub{display:block;margin:0;font-size:12px}
+.tttiles{grid-template-columns:repeat(3,minmax(0,1fr))}.tttiles .stat{padding:10px 12px}.tttiles .stat b{font-size:19px}
+.tttabs{margin-bottom:10px}
+.ttlink{width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.ttlink:hover{background:var(--surface2)}
+.ttamt{display:flex;align-items:center;gap:8px}.ttamt i{font-style:normal;color:var(--muted)}.ttpaid{border-bottom:0;padding-top:10px!important;font-size:16px}
+.ttgrid{display:grid;gap:0 16px;align-items:start}
+@media (min-width:1000px){.host-reports>.ttwrap{grid-column:1/-1}.tttiles{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .ttgrid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}.ttcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}}.panel .hrow2:last-child{border-bottom:0}
 @media (max-width:440px){.top{gap:8px;padding-left:12px;padding-right:12px}.top h1 .b1{font-size:18px}.status{font-size:11px;padding:4px 8px}.status i{width:7px;height:7px}.brand{gap:9px}.mark{width:36px;height:36px;border-radius:11px}}
 .scanvid{width:100%;max-height:300px;border-radius:16px;background:#000;object-fit:cover;display:block}.scanvid[hidden]{display:none}
 .scanform{display:flex;gap:8px}.scanform input{flex:1;min-width:0}
@@ -466,7 +474,7 @@ function pdfLogo(doc,x,y,w){ try { doc.addImage(LOGO,'JPEG',x,y,w,w); return tru
 const state = {
   items:[], customers:[], sales:[], invoices:[], business:'',
   loaded:{items:false,customers:false,sales:false,invoices:false},
-  tab:'home', hperiod:'30', hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rrange:{key:'30'}, rview:'sales', srange:{key:'30'}, sview:'orders', sq:'', slimit:0, cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
+  tab:'home', hperiod:'30', hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rrange:{key:'30'}, rview:'sales', ttview:'overview', srange:{key:'30'}, sview:'orders', sq:'', slimit:0, cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
   db:null, dl:null, assets:null, status:'connecting', canWrite:true
 };
 let host = null; // list host for current tab
@@ -1808,29 +1816,29 @@ function ttSums(recs){
 // The result line, and anything TikTok paid or kept that its breakdown does not explain.
 function ttPaidCard(secs, paid){
   const gap = round2(paid - secs.reduce((a,x)=>a+x.total,0));
-  return h('div',{class:'row wide',style:'margin-bottom:10px'},
+  return h('div',{class:'row wide ttcard'},
     h('div',{style:'display:flex;justify-content:space-between;align-items:baseline'}, h('div',{class:'hh',style:'margin:0'},'= Paid to you'), h('b',{style:'font-size:18px'}, money(round2(paid)))),
     Math.abs(gap)>=0.01 ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'TikTok\'s breakdown does not add up to the payout by '+money(Math.abs(gap))+(gap<0 ? ' (kept without a listed reason).' : ' (paid without a listed reason).')) : null);
 }
 // Lines TikTok sends for reference (what the customer paid in all, discounts shown another way). They repeat
 // amounts already in the sections, so they are not added up.
 function ttRefCard(lines){
-  return h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'For reference'),
-    h('p',{class:'hint',style:'margin:0 0 4px'},'Other figures TikTok sends. They repeat amounts already counted above, so they are not added up.'),
-    lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label), h('b',{}, money(round2(e.v))))));
+  return h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'For reference'),
+    h('p',{class:'hint',style:'margin:0 0 4px'},'Other figures TikTok sends. They repeat amounts already counted elsewhere, so they are not added up.'),
+    h('div',{class:'ttcols'}, lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label), h('b',{}, money(round2(e.v)))))));
 }
 // One section as a card: its lines, each with its share of revenue, and a subtotal.
 function ttSectionCard(sec, rev, perLine){
   const amt = v=>h('b',{style:v<0 ? 'color:var(--bad)' : ''}, money(round2(v)));
-  return h('div',{class:'row wide',style:'margin-bottom:10px'},
+  return h('div',{class:'row wide ttcard'},
     h('div',{style:'display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 4px'}, h('div',{class:'hh',style:'margin:0'}, sec.title), amt(sec.total)),
     sec.hint ? h('p',{class:'hint',style:'margin:0 0 4px'}, sec.hint) : null,
-    sec.lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label, perLine ? h('small',{class:'meta',style:'display:block;margin:0'}, e.n+' order line'+(e.n===1?'':'s')+(rev>0 ? ' · '+Math.abs(Math.round(e.v/rev*1000)/10)+'% of sales' : '')) : null), amt(e.v))));
+    h('div',{class:'ttcols'}, sec.lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label, perLine ? h('small',{class:'meta ttsub'}, fmtN(e.n)+' order line'+(e.n===1?'':'s')+(rev>0 ? ' · '+Math.abs(Math.round(e.v/rev*1000)/10)+'% of sales' : '')) : null), amt(e.v)))));
 }
 const ttTime = r => new Date(r.at || r.statement_time).getTime();
 let ttSyncing = null;
 function renderTikTok(b){
-  const box = h('div',{}, h('p',{class:'empty'},'Loading TikTok Shop…')); host.append(box);
+  const box = h('div',{class:'ttwrap'}, h('p',{class:'empty'},'Loading TikTok Shop…')); host.append(box);
   let failBox = box;   // where an error shows: the whole box until the shop header is up, then just below it
   const redraw = ()=>{ if (state.tab==='reports' && state.rview==='tiktok') renderList(); };
   window.claude.use('tiktok').then(async tt=>{
@@ -1887,38 +1895,61 @@ function renderTikTok(b){
     const rep = await step('the TikTok totals', ()=>tt.report(b.from, b.to));
     const stmts = await step('the TikTok payouts', ()=>tt.statements(b.from, b.to));
     if (!box.isConnected) return;
-    const out = [];
     if (!rep.order_count && !stmts.length){ body.replaceChildren(h('p',{class:'empty'}, ttSyncing ? 'Pulling your TikTok data. This can take a few minutes the first time.' : 'No TikTok payouts or orders in these dates.')); return; }
     const top = k => num((rep.lines.find(l=>!l.path && l.key===k) || {}).total);
     const secs = ttSections(rep.lines), secTotal = id => (secs.find(x=>x.id===id) || {total:0}).total;
     const rev = rep.lines.some(l=>!l.path && l.key==='revenue_amount') ? top('revenue_amount') : secTotal('sales'), paid = top('settlement_amount');
     const costs = secTotal('fees') + secTotal('creator') + secTotal('shipping');
-    out.push(h('div',{class:'sum'}, stat(money(round2(rev)),'sales'), stat(money(round2(paid)),'paid to you'), stat(rev>0 ? Math.round(-costs/rev*100)+'%' : '–','of sales to fees and shipping')));
-    out.push(h('div',{class:'sum'}, stat(money(round2(secTotal('fees'))),'TikTok fees'), stat(money(round2(secTotal('creator'))),'creator commissions'), stat(money(round2(secTotal('shipping'))),'shipping')));
-    const bk = buckets(rep.days.map(d=>{ const [y,m,dd] = String(d.day).split('-').map(Number); return {t:new Date(y, m-1, dd).getTime(), v:num(d.paid)}; }), b);
-    if (bk.rows.length>1) out.push(bucketChart('Paid to you', bk, v=>money(round2(v))));
-    out.push(h('div',{class:'hh',style:'margin:14px 2px 8px'},'Breakdown: from sales to your payout'));
-    secs.forEach(sec=>out.push(ttSectionCard(sec, rev, true)));
-    out.push(ttPaidCard(secs, paid));
-    if (secs.reference.length) out.push(ttRefCard(secs.reference));
-    // Order lines count on their statement's date, so they add up to the payouts unless TikTok paid or took
-    // something it did not list as a line (or a payout's lines are still being pulled).
-    if (stmts.length){
-      const payouts = stmts.reduce((a,s)=>a+ttNum(s.data.settlement_amount),0), gap = round2(payouts - paid);
-      if (Math.abs(gap)>=1) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts compared with order lines'),
-        h('div',{class:'hrow2'}, h('span',{},'Paid on order lines'), h('b',{}, money(round2(paid)))),
-        h('div',{class:'hrow2'}, h('span',{}, 'Paid out without order lines', h('small',{class:'meta',style:'display:block;margin:0'},'In TikTok\'s payouts but not listed line by line, or still being pulled from TikTok.')), h('b',{style:gap<0 ? 'color:var(--bad)' : ''}, money(gap))),
-        h('div',{class:'hrow2'}, h('span',{},'Payouts in these dates'), h('b',{}, money(round2(payouts))))));
+    const payouts = stmts.reduce((a,s)=>a+ttNum(s.data.settlement_amount),0), pgap = round2(payouts - paid);
+    const amt = v=>h('b',{style:v<0 ? 'color:var(--bad)' : ''}, money(round2(v)));
+    const pct = v=>rev>0 ? Math.abs(Math.round(v/rev*1000)/10)+'% of sales' : '';
+    const tiles = h('div',{class:'sum tttiles'}, stat(money(round2(rev)),'sales'), stat(money(round2(secTotal('fees'))),'TikTok fees'),
+      secTotal('creator') ? stat(money(round2(secTotal('creator'))),'creator commissions') : null, stat(money(round2(secTotal('shipping'))),'shipping'),
+      stat(rev>0 ? Math.round(-costs/rev*100)+'%' : '–','of sales to fees and shipping'), stat(money(round2(paid)),'paid to you'));
+    // Tabs jump straight to one part of the report; the one picked stays picked when the page is redrawn.
+    const views = [['overview','Overview']].concat(secs.map(s=>[s.id, s.title]), secs.reference.length ? [['reference','For reference']] : [],
+      stmts.length ? [['payouts','Payouts']] : [], [['orders','Orders']]);
+    const tabs = h('div',{class:'chips tttabs',role:'tablist'}), view = h('div',{});
+    const show = k=>{
+      state.ttview = views.some(([kk])=>kk===k) ? k : 'overview';
+      tabs.replaceChildren(...views.map(([kk,l])=>h('button',{class:'chip',type:'button',role:'tab','aria-pressed':String(kk===state.ttview),onclick:()=>show(kk)}, l)));
+      view.replaceChildren(...build(state.ttview));
+    };
+    const compare = ()=>Math.abs(pgap)>=1 ? h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts compared with order lines'),
+      h('div',{class:'hrow2'}, h('span',{},'Paid on order lines'), amt(paid)),
+      h('div',{class:'hrow2'}, h('span',{}, 'Paid out without order lines', h('small',{class:'meta ttsub'},'In TikTok\'s payouts but not listed line by line, or still being pulled from TikTok.')), amt(pgap)),
+      h('div',{class:'hrow2'}, h('span',{},'Payouts in these dates'), amt(payouts))) : null;
+    function build(k){
+      if (k==='overview'){
+        // From sales to the payout, one line per section; each opens its tab.
+        const gap = round2(paid - secs.reduce((a,x)=>a+x.total,0));
+        const sum = h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'From sales to your payout'),
+          secs.map(sec=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show(sec.id)}, h('span',{}, sec.title, h('small',{class:'meta ttsub'}, pct(sec.total))), h('span',{class:'ttamt'}, amt(sec.total), h('i',{'aria-hidden':'true'},'›')))),
+          h('div',{class:'hrow2 ttpaid'}, h('b',{},'= Paid to you'), h('b',{}, money(round2(paid)))),
+          Math.abs(gap)>=0.01 ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'TikTok\'s breakdown does not add up to the payout by '+money(Math.abs(gap))+'.') : null);
+        const bk = buckets(rep.days.map(d=>{ const [y,m,dd] = String(d.day).split('-').map(Number); return {t:new Date(y, m-1, dd).getTime(), v:num(d.paid)}; }), b);
+        const biggest = secs.filter(s=>s.id!=='sales').flatMap(s=>s.lines.map(e=>Object.assign({title:s.title}, e))).filter(e=>e.v<0).sort((a,b)=>a.v-b.v).slice(0,6);
+        const right = h('div',{}, bk.rows.length>1 ? bucketChart('Paid to you', bk, v=>money(round2(v))) : null,
+          biggest.length ? h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Biggest costs'),
+            biggest.map(e=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show(e.sec)}, h('span',{}, e.label, h('small',{class:'meta ttsub'}, e.title+(rev>0 ? ' · '+pct(e.v) : ''))), h('span',{class:'ttamt'}, amt(e.v), h('i',{'aria-hidden':'true'},'›'))))) : null,
+          compare());
+        return [h('div',{class:'ttgrid'}, sum, right)];
+      }
+      const sec = secs.find(s=>s.id===k);
+      if (sec) return [ttSectionCard(sec, rev, true)];
+      if (k==='reference') return [ttRefCard(secs.reference)];
+      if (k==='payouts') return [compare(), h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts ('+stmts.length+')'),
+        h('div',{class:'ttcols'}, stmts.slice(0,200).map(s=>h('div',{class:'hrow2'}, h('span',{}, fmtDate(s.statement_time), h('small',{class:'meta ttsub'}, String(s.data.payment_status||'').replace(/_/g,' ').toLowerCase())), amt(ttNum(s.data.settlement_amount))))),
+        stmts.length>200 ? h('p',{class:'hint'}, 'Showing the newest 200 payouts. Pick fewer dates to see others.') : null)];
+      return [h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Recent orders'), h('p',{class:'hint',style:'margin:0 0 4px'}, fmtN(rep.order_count)+' TikTok order line'+(rep.order_count==1?'':'s')+' in these dates (sales, refunds and adjustments).'),
+        h('div',{class:'ttcols'}, rep.orders.map(o=>{ const r = num(o.revenue), p = num(o.paid);
+          return h('button',{class:'att',type:'button',onclick:()=>openTikTokOrder(tt, o.id)},
+            h('span',{class:'attl'}, h('span',{}, 'Order '+o.id), h('small',{}, fmtDate(o.at)+' · sold '+money(round2(r))+(r>0 ? ' · '+Math.round((r-p)/r*100)+'% to TikTok and costs' : ''))),
+            h('span',{class:'attv'}, money(round2(p))), h('span',{class:'attc','aria-hidden':'true'},'›')); })),
+        rep.order_count>rep.orders.length ? h('p',{class:'hint'}, 'Showing the newest '+rep.orders.length+' orders. Pick fewer dates to see others.') : null)];
     }
-    if (stmts.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts ('+stmts.length+')'),
-      stmts.slice(0,60).map(s=>h('div',{class:'hrow2'}, h('span',{}, fmtDate(s.statement_time), h('small',{class:'meta',style:'display:block;margin:0'}, String(s.data.payment_status||'').replace(/_/g,' ').toLowerCase())), h('b',{}, money(round2(ttNum(s.data.settlement_amount))))))));
-    out.push(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Recent orders'), h('p',{class:'hint',style:'margin:0 0 4px'}, fmtN(rep.order_count)+' TikTok order line'+(rep.order_count==1?'':'s')+' in these dates (sales, refunds and adjustments).'),
-      rep.orders.map(o=>{ const r = num(o.revenue), p = num(o.paid);
-        return h('button',{class:'att',type:'button',onclick:()=>openTikTokOrder(tt, o.id)},
-          h('span',{class:'attl'}, h('span',{}, 'Order '+o.id), h('small',{}, fmtDate(o.at)+' · sold '+money(round2(r))+(r>0 ? ' · '+Math.round((r-p)/r*100)+'% to TikTok and costs' : ''))),
-          h('span',{class:'attv'}, money(round2(p))), h('span',{class:'attc','aria-hidden':'true'},'›')); }),
-      rep.order_count>rep.orders.length ? h('p',{class:'hint'}, 'Showing the newest '+rep.orders.length+' orders. Pick fewer dates to see others.') : null));
-    body.replaceChildren(...out);
+    show(state.ttview || 'overview');
+    body.replaceChildren(tiles, tabs, view);
   }).catch(e=>{ const msg = h('p',{class:'empty'}, (e && e.message) || 'TikTok Shop is not available right now.'); if (failBox.isConnected) failBox.replaceChildren(msg); });
 }
 async function openTikTokOrder(tt, key){

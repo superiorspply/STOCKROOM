@@ -1768,6 +1768,9 @@ function ttRoot(name){
   if (/reserve/.test(s)) return 'reserve';
   return 'other';
 }
+// TikTok's top-level totals, which add up to the payout, and the section each makes.
+const TT_TOTALS = {revenue_amount:'sales', fee_tax_amount:'fees', fee_amount:'fees', tax_amount:'fees', shipping_cost_amount:'shipping',
+  adjustment_amount:'adjust', reserve_amount:'reserve'};
 // Fees and tax are one total at TikTok; split for reading.
 function ttFeeKind(k, path){
   const s = (path.split('.').slice(1).concat(k).join('.')).toLowerCase();   // without the fee_tax_breakdown root
@@ -1786,7 +1789,9 @@ function ttSections(sums){
     const v = num(a.total), n = num(a.n);
     if (!a.path){
       if (a.key==='settlement_amount') continue;
-      const sec = a.key==='fee_tax_amount' || a.key==='fee_amount' || a.key==='tax_amount' ? 'fees' : ttRoot(a.key.replace(/_amount$/,''));
+      // Only TikTok's own totals make up the sections. Its older layout repeats every breakdown line at the top
+      // level too (referral fee, customer payment, ...); those are shown for reference, not added up.
+      const sec = TT_TOTALS[a.key] || null;
       if (sec) add(tops, sec, {}, v, n); else add(ref, a.key, {key:a.key, label:ttLabel(a.key)}, v, n);
       continue;
     }

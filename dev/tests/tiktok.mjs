@@ -48,6 +48,8 @@ try {
   const paidCard = await card('= Paid to you');
   check(paidCard.includes('$61.20') && !paidCard.includes('does not add up'), 'the sections add up to the payout');
   const calls = await (await fetch(API + '/mock-tiktok/calls')).json();
+  const stored = await P.evaluate(async () => { const tt = await window.claude.use('tiktok'); return (await tt.order('5770001'))[0].data; });
+  check(!stored.sku_list && !stored.note && stored.currency === 'USD' && stored.fee_tax_breakdown.fee.platform_commission_amount === '-6.00', 'order lines are stored slim: amounts and short fields, not lists or long text');
   check(calls.some(c => c.includes('/finance/202501/')) && calls.some(c => c.includes('/finance/202309/statements/S1/statement_transactions')), 'falls back to an older TikTok API version when a newer one is not available');
   await P.getByRole('button', {name:/Order 5770001/}).click();
   await P.locator('.sheet').getByText('Creator commissions').waitFor({timeout:8000});

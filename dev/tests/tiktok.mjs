@@ -39,13 +39,13 @@ try {
   const card = async title => (await P.locator('.row.wide').filter({has:P.locator('.hh', {hasText:new RegExp('^' + title + '$')})}).first().textContent()) || '';
   const tab = async name => { await P.locator('.tttabs').getByRole('tab', {name, exact:true}).click(); };
   const overview = await card('From sales to your payout');
-  check(overview.includes('$61.20') && !overview.includes('does not add up') && overview.includes('TikTok fees') && overview.includes('Shipping'), 'the overview adds the sections up to the payout (' + overview + ')');
+  check(overview.includes('$56.20') && overview.includes('Reserve') && !overview.includes('does not add up') && overview.includes('TikTok fees') && overview.includes('Shipping'), 'the overview adds the sections up to the payout (' + overview + ')');
   check((await card('Biggest costs')).includes('Creator (affiliate) commission'), 'the overview lists the biggest costs');
   check(await P.locator('.tttabs').getByRole('tab').count() >= 6, 'tabs jump to each part of the report');
   const stc = await card('TikTok statement totals');
-  check(stc.includes('Total settlement') && stc.includes('$46.20') && stc.includes('Revenue') && stc.includes('$100.00'), 'TikTok\'s own statement totals are shown (' + stc + ')');
+  check(stc.includes('Total settlement') && stc.includes('$46.20') && stc.includes('Revenue') && stc.includes('$100.00') && /Payable amount\$41\.20/.test(stc), 'TikTok\'s own statement totals are shown, with reserve and the payable amount (' + stc + ')');
   const chk = await card('Checked against TikTok');
-  check(chk.includes('1 of 2 payouts match their order lines to the cent') && chk.includes('no order lines'), 'each payout is checked against its order lines (' + chk + ')');
+  check(chk.includes('1 of 2 payouts match their order lines to the cent') && chk.includes('no order lines') && !chk.includes('differ'), 'each payout is checked against its order lines (' + chk + ')');
   await tab('TikTok fees');
   check((await card('TikTok fees')).includes('-$10.80') && (await card('TikTok fees')).includes('TikTok commission') && (await card('TikTok fees')).includes('Payment processing fee') && (await card('TikTok fees')).includes('Shipped by TikTok fee'), 'the TikTok fees tab shows each fee with a subtotal');
   await tab('Creator commissions');
@@ -62,7 +62,7 @@ try {
   check(ref.includes('Customer payment') && ref.includes('$107.50') && ref.includes('Fbm shipping cost'), 'reference figures are listed apart, not added up');
   await tab('Payouts');
   const vs = await card('Payouts compared with order lines');
-  check(vs.includes('-$15.00') && vs.includes('$46.20'), 'money paid out without order lines shows as the gap between payouts and order lines (' + vs + ')');
+  check(vs.includes('-$10.00') && vs.includes('$46.20') && (await card('Payouts \\(2\\)')).includes('matches its order lines and -$5.00 reserve'), 'payouts are checked with their reserve, and money paid out without order lines shows as the gap between payouts and order lines (' + vs + ')');
   check((await card('Payouts \\(2\\)')).includes('paid'), 'payouts are listed');
   await P.getByRole('button', {name:'7 days', exact:true}).click();
   await P.getByText('From sales to your payout').or(P.getByText('Payouts compared with order lines')).first().waitFor({timeout:15000});

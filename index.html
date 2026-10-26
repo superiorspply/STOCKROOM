@@ -1860,13 +1860,13 @@ const ttStmtLabel = k => (TT_STMT.find(x=>x[0]===k) || [k, ttLabel(k)])[1];
 const ttStmtKeys = t => { const ks = Object.keys(t).filter(k=>Math.abs(num(t[k]))>=0.005 || k==='settlement_amount'), order = TT_STMT.map(x=>x[0]);
   return ks.sort((a,b)=>(order.indexOf(a)+1 || 99)-(order.indexOf(b)+1 || 99)); };
 // Whether a payout's order lines add up to what TikTok paid: [kind, words] or null when there is nothing to check.
-// TikTok's lines can count reserve the payout holds back or releases, so a difference of exactly that matches too.
+// A payout's total leaves out reserve, which its order lines count (held back or released), so the lines less
+// their reserve are checked against it.
 function ttPayoutCheck(s){
   if (s.linesPaid==null) return null;
   if (!s.pulled && !s.lines) return ['pending','details not pulled from TikTok yet'];
-  const d = round2(s.linesPaid - ttNum(s.data.settlement_amount)), res = ttNum(s.data.reserve_amount);
-  if (Math.abs(d)<0.005) return ['ok','matches its order lines'];
-  if (res && (Math.abs(d-res)<0.005 || Math.abs(d+res)<0.005)) return ['ok','matches its order lines and reserve'];
+  const res = num(s.linesReserve), d = round2(s.linesPaid - res - ttNum(s.data.settlement_amount));
+  if (Math.abs(d)<0.005) return ['ok', res ? 'matches its order lines and '+money(round2(res))+' reserve' : 'matches its order lines'];
   if (!s.lines) return ['none','TikTok lists no order lines for it'];
   return ['off','its order lines differ by '+money(d)];
 }
@@ -1947,7 +1947,10 @@ function renderTikTok(b){
     const checks = stmts.map(s=>[s, ttPayoutCheck(s)]), bad = checks.filter(([,c])=>c && c[0]!=='ok'), checked = checks.filter(([,c])=>c).length;
     const stmtCard = ()=>pres.count ? h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'TikTok statement totals'),
       h('p',{class:'hint',style:'margin:0 0 4px'}, 'Straight from TikTok\'s '+fmtN(pres.count)+' payout'+(pres.count==1?'':'s')+' in these dates: the same figures as Seller Center\'s Finance reports.'),
-      h('div',{class:'ttcols'}, ttStmtKeys(stTot).map(k=>h('div',{class:'hrow2'+(k==='settlement_amount' ? ' ttpaid' : '')}, h('span',{}, ttStmtLabel(k)), amt(num(stTot[k])))))) : null;
+      h('div',{class:'ttcols'}, ttStmtKeys(stTot).map(k=>h('div',{class:'hrow2'+(k==='settlement_amount' ? ' ttpaid' : '')}, h('span',{}, ttStmtLabel(k)), amt(num(stTot[k])))),
+        // Reserve isn't in TikTok's payout totals; it comes from the payouts' order lines, as Seller Center adds it.
+        stTot.reserve_amount==null && secTotal('reserve') ? [h('div',{class:'hrow2'}, h('span',{}, 'Reserve'), amt(secTotal('reserve'))),
+          h('div',{class:'hrow2 ttpaid'}, h('span',{}, 'Payable amount'), amt(num(stTot.settlement_amount) + secTotal('reserve')))] : null)) : null;
     const checkCard = ()=>checked ? h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Checked against TikTok'),
       h('p',{style:'margin:0 0 4px'}, bad.length ? (checked-bad.length)+' of '+checked+' payouts match their order lines to the cent.' : 'All '+checked+' payouts match their order lines to the cent.'),
       bad.slice(0,6).map(([s,c])=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show('payouts')}, h('span',{}, fmtDate(ttDay(s.statement_time))+' · '+money(round2(ttNum(s.data.settlement_amount))), h('small',{class:'meta ttsub'}, c[1])), h('span',{class:'ttamt'}, h('i',{'aria-hidden':'true'},'›')))),

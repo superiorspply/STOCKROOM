@@ -260,10 +260,11 @@ async function mockClaude(req, res, url){
 const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[]};
 export const MOCK_TIKTOK = {
 // Shaped like TikTok's: top-level totals add up to the payout; the breakdowns are their detail; supplementary
-// components repeat amounts for reference. S2 is a payout TikTok sends no lines for.
+// components repeat amounts for reference. TikTok holds $5 of T1 in reserve: its line counts that, S1's total
+// doesn't. S2 is a payout TikTok sends no lines for.
   statements:[{id:'S1', statement_time:Math.floor(Date.now() / 1000) - 2 * 86400, settlement_amount:'61.20', revenue_amount:'100.00', fee_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0', payment_status:'PAID', currency:'USD'},
     {id:'S2', statement_time:Math.floor(Date.now() / 1000) - 1 * 86400, settlement_amount:'-15.00', revenue_amount:'0', payment_status:'PAID', currency:'USD'}],
-  transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'61.20', fee_tax_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0',
+  transactions:[{id:'T1', type:'ORDER', order_id:'5770001', order_create_time:Math.floor(Date.now() / 1000) - 3 * 86400, revenue_amount:'100.00', settlement_amount:'56.20', fee_tax_amount:'-30.80', shipping_cost_amount:'-8.00', adjustment_amount:'0', reserve_amount:'-5.00',
     revenue_breakdown:{subtotal_before_discount_amount:'100.00', seller_discount_amount:'0'},
     fee_tax_breakdown:{fee:{platform_commission_amount:'-6.00', transaction_fee_amount:'-2.90', affiliate_commission_amount:'-20.00', sfp_service_fee_amount:'-1.90'}},
     shipping_cost_breakdown:{customer_paid_shipping_fee_amount:'5.00', actual_shipping_fee_amount:'-14.00', tiktok_shop_shipping_incentive_amount:'1.00', supplementary_component:{fbm_shipping_cost_amount:'-14.00'}},

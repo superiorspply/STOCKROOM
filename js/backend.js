@@ -320,7 +320,7 @@ const runtime = {
         const r = await sb.rpc('tiktok_payouts', {cid:S.company.id, t_from:iso(from), t_to:iso(to)});
         // {count, totals, list}; each payout's data holds its amounts, plus its order lines as Stockroom has them.
         if (!r.error && !Array.isArray(r.data)) return {count:r.data.count, totals:r.data.totals, list:r.data.list.map(p => ({id:p.id, statement_time:p.statement_time,
-          data:Object.assign({payment_status:p.payment_status}, p.amounts), lines:p.lines, linesPaid:Number(p.lines_paid), pulled:p.pulled}))};
+          data:Object.assign({payment_status:p.payment_status}, p.amounts), lines:p.lines, linesPaid:Number(p.lines_paid), linesReserve:Number(p.lines_reserve || 0), pulled:p.pulled}))};
         if (!r.error) return {count:r.data.length, totals:null, list:r.data.map(p => ({id:p.id, statement_time:p.statement_time, data:{settlement_amount:p.settlement_amount, payment_status:p.payment_status}}))};
         if (!/function|schema cache/i.test(r.error.message)) throw appError(r.error);
         // Before the payouts migration: read the table directly.

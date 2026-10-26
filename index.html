@@ -276,6 +276,7 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .ttlink{width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.ttlink:hover{background:var(--surface2)}
 .ttamt{display:flex;align-items:center;gap:8px}.ttamt i{font-style:normal;color:var(--muted)}.ttpaid{border-bottom:0;padding-top:10px!important;font-size:16px}
 .ttgrid{display:grid;gap:0 16px;align-items:start}
+.ttship{margin:6px 0 4px}.ttship .stat b{font-size:18px}.ttpart{margin-top:8px}.ttparth{border-bottom:1px solid var(--line);padding-bottom:6px!important}.ttparth b:first-child{font-size:14px}
 @media (min-width:1000px){.host-reports>.ttwrap{grid-column:1/-1}.tttiles{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
   .ttgrid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}.ttcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}}.panel .hrow2:last-child{border-bottom:0}
 @media (max-width:440px){.top{gap:8px;padding-left:12px;padding-right:12px}.top h1 .b1{font-size:18px}.status{font-size:11px;padding:4px 8px}.status i{width:7px;height:7px}.brand{gap:9px}.mark{width:36px;height:36px;border-radius:11px}}
@@ -1754,7 +1755,7 @@ const ttTotals = recs => { const t = {}; for (const r of recs) for (const [k,v,g
 // total is TikTok's own total; the nested breakdown is shown as its detail.
 const TT_SECTIONS = [['sales','Sales','What customers paid, less discounts and refunds.'],['fees','TikTok fees','Commission, payment processing and program fees.'],
   ['creator','Creator commissions','Paid to affiliates and creators who sold for you.'],['tax','Taxes','Sales tax collected and passed on, and tax on fees.'],
-  ['shipping','Shipping','Labels and fulfilment, less shipping customers paid.'],['adjust','Adjustments','One-off charges and credits. With early settlement, TikTok pays some orders early and takes it back ("recovery") when they settle, so the two mostly cancel out.'],
+  ['shipping','Shipping','What buyers paid for shipping, what TikTok covered, and what you paid.'],['adjust','Adjustments','One-off charges and credits. With early settlement, TikTok pays some orders early and takes it back ("recovery") when they settle, so the two mostly cancel out.'],
   ['reserve','Reserve','Money TikTok held back or released.'],['other','Other','Amounts TikTok sent that do not fit the sections above.']];
 // Which section a top-level total, or the root of a nested breakdown, belongs to. null: for reference only.
 function ttRoot(name){
@@ -1828,12 +1829,29 @@ function ttRefCard(lines){
     h('div',{class:'ttcols'}, lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label), h('b',{}, money(round2(e.v)))))));
 }
 // One section as a card: its lines, each with its share of revenue, and a subtotal.
+// Shipping lines by who paid: buyers (and refunds of what they paid), TikTok (incentives and discounts it
+// funds), or you (labels, returns, package fees, your own shipping discounts, and anything not itemized).
+const TT_SHIP_PARTS = [['buyer','Paid by buyers'],['tiktok','Covered by TikTok'],['you','Paid by you']];
+function ttShipPart(e){
+  const k = e.key.toLowerCase();
+  if (/customer|buyer/.test(k)) return 'buyer';
+  if (/seller/.test(k)) return 'you';
+  if (/incentive|subsidy|platform|tiktok|reimburs|discount/.test(k)) return 'tiktok';
+  return 'you';
+}
+function ttShipSplit(sec){
+  return TT_SHIP_PARTS.map(([id,title])=>{ const lines = sec.lines.filter(e=>ttShipPart(e)===id); return {id, title, lines, total:lines.reduce((a,e)=>a+e.v,0)}; }).filter(x=>x.lines.length);
+}
 function ttSectionCard(sec, rev, perLine){
   const amt = v=>h('b',{style:v<0 ? 'color:var(--bad)' : ''}, money(round2(v)));
+  const row = e=>h('div',{class:'hrow2'}, h('span',{}, e.label, perLine ? h('small',{class:'meta ttsub'}, fmtN(e.n)+' order line'+(e.n===1?'':'s')+(rev>0 ? ' · '+Math.abs(Math.round(e.v/rev*1000)/10)+'% of sales' : '')) : null), amt(e.v));
+  const parts = sec.id==='shipping' ? ttShipSplit(sec) : null;
   return h('div',{class:'row wide ttcard'},
-    h('div',{style:'display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 4px'}, h('div',{class:'hh',style:'margin:0'}, sec.title), amt(sec.total)),
+    h('div',{style:'display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 4px'}, h('div',{class:'hh',style:'margin:0'}, sec.id==='shipping' ? 'Shipping (net)' : sec.title), amt(sec.total)),
     sec.hint ? h('p',{class:'hint',style:'margin:0 0 4px'}, sec.hint) : null,
-    h('div',{class:'ttcols'}, sec.lines.map(e=>h('div',{class:'hrow2'}, h('span',{}, e.label, perLine ? h('small',{class:'meta ttsub'}, fmtN(e.n)+' order line'+(e.n===1?'':'s')+(rev>0 ? ' · '+Math.abs(Math.round(e.v/rev*1000)/10)+'% of sales' : '')) : null), amt(e.v)))));
+    parts ? [h('div',{class:'sum ttship'}, parts.map(p=>stat(money(round2(p.total)), p.title))),
+        parts.map(p=>h('div',{class:'ttpart'}, h('div',{class:'hrow2 ttparth'}, h('b',{}, p.title), amt(p.total)), h('div',{class:'ttcols'}, p.lines.map(row))))]
+      : h('div',{class:'ttcols'}, sec.lines.map(row)));
 }
 const ttTime = r => new Date(r.at || r.statement_time).getTime();
 let ttSyncing = null;
@@ -1903,8 +1921,10 @@ function renderTikTok(b){
     const payouts = stmts.reduce((a,s)=>a+ttNum(s.data.settlement_amount),0), pgap = round2(payouts - paid);
     const amt = v=>h('b',{style:v<0 ? 'color:var(--bad)' : ''}, money(round2(v)));
     const pct = v=>rev>0 ? Math.abs(Math.round(v/rev*1000)/10)+'% of sales' : '';
+    const shipTiles = ()=>{ const sh = secs.find(x=>x.id==='shipping'); if (!sh) return []; const p = Object.fromEntries(ttShipSplit(sh).map(x=>[x.id, x.total]));
+      return [stat(money(round2(p.buyer||0)),'shipping buyers paid'), stat(money(round2(p.you||0)),'shipping you paid')]; };
     const tiles = h('div',{class:'sum tttiles'}, stat(money(round2(rev)),'sales'), stat(money(round2(secTotal('fees'))),'TikTok fees'),
-      secTotal('creator') ? stat(money(round2(secTotal('creator'))),'creator commissions') : null, stat(money(round2(secTotal('shipping'))),'shipping'),
+      secTotal('creator') ? stat(money(round2(secTotal('creator'))),'creator commissions') : null, ...shipTiles(),
       stat(rev>0 ? Math.round(-costs/rev*100)+'%' : '–','of sales to fees and shipping'), stat(money(round2(paid)),'paid to you'));
     // Tabs jump straight to one part of the report; the one picked stays picked when the page is redrawn.
     const views = [['overview','Overview']].concat(secs.map(s=>[s.id, s.title]), secs.reference.length ? [['reference','For reference']] : [],
@@ -1924,7 +1944,7 @@ function renderTikTok(b){
         // From sales to the payout, one line per section; each opens its tab.
         const gap = round2(paid - secs.reduce((a,x)=>a+x.total,0));
         const sum = h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'From sales to your payout'),
-          secs.map(sec=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show(sec.id)}, h('span',{}, sec.title, h('small',{class:'meta ttsub'}, pct(sec.total))), h('span',{class:'ttamt'}, amt(sec.total), h('i',{'aria-hidden':'true'},'›')))),
+          secs.map(sec=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show(sec.id)}, h('span',{}, sec.title, h('small',{class:'meta ttsub'}, sec.id==='shipping' ? ttShipSplit(sec).map(p=>p.title.replace(/^Paid by |^Covered by /,'').replace(/^\w/, c=>c.toUpperCase())+' '+money(round2(p.total))).join(' · ') : pct(sec.total))), h('span',{class:'ttamt'}, amt(sec.total), h('i',{'aria-hidden':'true'},'›')))),
           h('div',{class:'hrow2 ttpaid'}, h('b',{},'= Paid to you'), h('b',{}, money(round2(paid)))),
           Math.abs(gap)>=0.01 ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'TikTok\'s breakdown does not add up to the payout by '+money(Math.abs(gap))+'.') : null);
         const bk = buckets(rep.days.map(d=>{ const [y,m,dd] = String(d.day).split('-').map(Number); return {t:new Date(y, m-1, dd).getTime(), v:num(d.paid)}; }), b);

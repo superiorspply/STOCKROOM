@@ -47,7 +47,10 @@ try {
   await tab('Creator commissions');
   check((await card('Creator commissions')).includes('-$20.00'), 'creator commissions have their own tab');
   await tab('Shipping');
-  check((await card('Shipping')).includes('-$8.00') && !(await card('Shipping')).includes('Fbm'), 'shipping has its own tab, without TikTok\'s repeated reference lines');
+  const ship = await card('Shipping \\(net\\)');
+  check(ship.includes('-$8.00') && !ship.includes('Fbm'), 'shipping has its own tab, without TikTok\'s repeated reference lines');
+  check(/Paid by buyers\$5\.00/.test(ship) && /Covered by TikTok\$1\.00/.test(ship) && /Paid by you-\$14\.00/.test(ship), 'shipping is split into what buyers paid, what TikTok covered and what you paid (' + ship + ')');
+  check((await P.locator('.tttiles').textContent()).includes('shipping buyers paid'), 'the tiles show shipping buyers paid and shipping you paid');
   await tab('Sales');
   check((await card('Sales')).includes('$100.00'), 'sales have their own tab');
   await tab('For reference');
@@ -68,7 +71,7 @@ try {
   await P.getByRole('button', {name:/Order 5770001/}).click();
   await P.locator('.sheet').getByText('Creator commissions').waitFor({timeout:8000});
   const sheet = await P.locator('.sheet').textContent();
-  check(sheet.includes('Shipping label cost') && sheet.includes('-$8.00') && sheet.includes('Creator commissions'), 'an order shows each money line, by section');
+  check(sheet.includes('Shipping label cost') && sheet.includes('-$14.00') && sheet.includes('Creator commissions'), 'an order shows each money line, by section');
   await P.screenshot({path:'/tmp/stockroom-tiktok-order.png'});
   await P.locator('.sheet').getByRole('button', {name:'Close'}).click();
   await P.screenshot({path:'/tmp/stockroom-tiktok.png', fullPage:true});

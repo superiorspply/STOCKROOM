@@ -1669,7 +1669,8 @@ function profitBlock(sales){
 function renderReports(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Reports cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales || !state.loaded.items || !state.loaded.customers || !state.loaded.invoices){ host.append(h('p',{class:'empty'},'Loading reports…')); return; }
-  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping'],['tiktok','TikTok Shop']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
+  if (state.rview==='tiktok' && !state.tiktokOn) state.rview = 'sales';
+  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping']].concat(state.tiktokOn ? [['tiktok','TikTok Shop']] : []).map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
   host.append(rangeChips(state.rrange, renderList));
   const b = rangeBounds(state.rrange);
   if (state.rview==='shipping'){ renderShipping(b); return; }
@@ -4058,10 +4059,12 @@ renderStatus(); renderTab();
     if (!db){ state.status = 'offline'; renderStatus(); setBanner('Could not connect to your data, so nothing you enter will be kept. Check your connection and reload the page.'); renderList(); return; }
     state.db = db;
     loadCart(); if (state.cart.lines.length || state.cart.cid) drawCart();
+    // TikTok Shop shows in Reports only for companies support has switched it on for.
+    if (state.isAdmin) window.claude.use('tiktok').then(tt=>tt.status()).then(st=>{ state.tiktokOn = st.enabled; if (state.tab==='reports') renderTab(); }).catch(()=>{});
     window.claude.use('tiktok').then(async tt=>{
       const p = tt.pending(); if (!p) return;
       toast('Connecting TikTok Shop…');
-      try { const r = await tt.finish(p); toast('Connected '+(r.shop_name || 'TikTok Shop')); goTab('reports', {rview:'tiktok'}); }
+      try { const r = await tt.finish(p); toast('Connected '+(r.shop_name || 'TikTok Shop')); state.tiktokOn = true; goTab('reports', {rview:'tiktok'}); }
       catch(e){ setBanner('TikTok Shop did not connect: '+e.message); }
     }).catch(()=>{});
     try { const can = user ? await user.can('data.write') : null; if (can===false){ state.canWrite = false; setBanner('You have view-only access. You can look at the data but not change it.'); } } catch(e){}

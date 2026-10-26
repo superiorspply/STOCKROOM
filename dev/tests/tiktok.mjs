@@ -72,6 +72,12 @@ try {
   const stored = await P.evaluate(async () => { const tt = await window.claude.use('tiktok'); return (await tt.order('5770001'))[0].data; });
   check(!stored.sku_list && !stored.note && stored.currency === 'USD' && stored.fee_tax_breakdown.fee.platform_commission_amount === '-6.00', 'order lines are stored slim: amounts and short fields, not lists or long text');
   check(calls.some(c => c.includes('/finance/202501/')) && calls.some(c => c.includes('/finance/202309/statements/S1/statement_transactions')), 'falls back to an older TikTok API version when a newer one is not available');
+  // The hourly job: only with the database's secret, and it syncs the connected company.
+  const cronSecret = execFileSync('su', ['postgres', '-c', `psql -qtA -d ${process.env.DEV_DB || 'stockroom_dev'} -c "select secret from public.tiktok_cron"`]).toString().trim();
+  const auto = h => fetch(API + '/functions/v1/tiktok', {method:'POST', headers:Object.assign({'Content-Type':'application/json'}, h), body:JSON.stringify({action:'auto'})});
+  check((await auto({'x-cron-secret':'wrong'})).status === 403 && (await auto({})).status === 403, 'the hourly sync refuses calls without the database\'s secret');
+  const ran = await (await auto({'x-cron-secret':cronSecret})).json();
+  check(ran.companies && ran.companies.some(c => !c.error && c.left === 0 && c.statements >= 1), 'the hourly sync pulls every connected shop and adds it into the totals (' + JSON.stringify(ran) + ')');
   await P.getByRole('button', {name:/Order 5770001/}).click();
   await P.locator('.sheet').getByText('Creator commissions').waitFor({timeout:8000});
   const sheet = await P.locator('.sheet').textContent();

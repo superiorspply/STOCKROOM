@@ -7,6 +7,15 @@ const CFG = window.STOCKROOM_CONFIG || {};
 const configured = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase);
 const sb = configured ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey) : null;
 
+// TikTok Shop sends people back here with ?code=…&state=tt…; keep that until the company is open (tiktok.pending()).
+const LS_TIKTOK = 'stockroom_tiktok';
+(function(){
+  const q = new URLSearchParams(location.search), st = q.get('state') || '', code = q.get('code') || q.get('auth_code');
+  if (!code || !st.startsWith('tt')) return;
+  try { sessionStorage.setItem(LS_TIKTOK, JSON.stringify({code, state:st})); } catch(e){}
+  history.replaceState(null, '', location.origin + location.pathname + location.hash);
+})();
+
 const ROLES = {
   owner:  {label:'Owner',  note:'Everything, including the team and company settings.'},
   admin:  {label:'Admin',  note:'Everything except changing other admins.'},
@@ -265,6 +274,48 @@ const runtime = {
           throw new Error(msg || (/Failed to send|fetch/i.test(error.message) ? 'Invoice scanning is not set up yet, or you are offline.' : error.message));
         }
         return data.invoice;
+      }
+    };
+  },
+  tiktok(){
+    const call = async body => {
+      const {data, error} = await sb.functions.invoke('tiktok', {body:Object.assign({company_id:S.company.id}, body)});
+      if (error){
+        let msg = '';
+        try { msg = (await error.context.json()).error; } catch(e){}
+        throw new Error(msg || (/Failed to send|fetch/i.test(error.message) ? 'TikTok Shop is not set up yet, or you are offline.' : error.message));
+      }
+      return data;
+    };
+    return {
+      async status(){
+        const {data, error} = await sb.rpc('tiktok_status', {cid:S.company.id});
+        if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'TikTok Shop is not set up in the database yet.' : error.message);
+        const r = data && data[0] || {};
+        return {connected:!!r.connected, shop:r.shop_name || '', connectedAt:r.connected_at, syncedAt:r.synced_at, error:r.sync_error || ''};
+      },
+      // Sends the browser to TikTok to approve the connection.
+      async connect(){ const {url} = await call({action:'start'}); location.assign(url); },
+      // TikTok's code from the redirect, if this visit came back from TikTok (used once).
+      pending(){ try { const v = JSON.parse(sessionStorage.getItem(LS_TIKTOK) || 'null'); sessionStorage.removeItem(LS_TIKTOK); return v; } catch(e){ return null; } },
+      finish: p => call({action:'finish', code:p.code, state:p.state}),
+      sync: () => call({action:'sync'}),
+      async disconnect(){ const {error} = await sb.rpc('tiktok_disconnect', {cid:S.company.id}); if (error) throw appError(error); },
+      // Payouts and order lines whose time falls in [from, to) (milliseconds).
+      async data(from, to){
+        const rows = async (table, col) => {
+          const out = [];
+          for (let i = 0; ; i += 1000){
+            let q = sb.from(table).select('*').eq('company_id', S.company.id).order(col, {ascending:false}).range(i, i + 999);
+            if (from > 0) q = q.gte(col, new Date(from).toISOString());
+            if (isFinite(to)) q = q.lt(col, new Date(to).toISOString());
+            const {data, error} = await q;
+            if (error) throw appError(error);
+            out.push(...data); if (data.length < 1000) return out;
+          }
+        };
+        const [statements, transactions] = await Promise.all([rows('tiktok_statements', 'statement_time'), rows('tiktok_transactions', 'at')]);
+        return {statements, transactions};
       }
     };
   },

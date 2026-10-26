@@ -25,6 +25,12 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Scanning goes through the `invoices` runtime in `js/backend.js` to the edge function `supabase/functions/scan-invoice` (Claude Opus 5.5 with structured output). The function is deployed by the owner from the dashboard and holds the `ANTHROPIC_API_KEY` secret.
   - Access and the monthly limit are in `scan_settings` / `scan_log`, changed only by support via `support_set_scan`.
   - The dev server runs the function as-is against a stand-in Claude API at `/mock-anthropic`.
+- TikTok Shop finance (Reports → TikTok Shop, `renderTikTok` in `index.html`) goes through the `tiktok` runtime in `js/backend.js` to the edge function `supabase/functions/tiktok`.
+  - The function connects through OAuth. The redirect URL is the site itself, and `backend.js` picks up `?code&state=tt…`.
+  - It signs TikTok API calls and syncs statements and statement transactions into `tiktok_statements` / `tiktok_transactions`, which owners and admins can read.
+  - Tokens live in `tiktok_links`, which only the service role can read.
+  - The UI shows every `*_amount` field, nested ones included, so new fee types appear without code changes.
+  - The dev server has a stand-in TikTok at `/mock-tiktok`. The test is `dev/tests/tiktok.mjs`.
 - Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
 - The cart is saved in `localStorage` per company (`stockroom_cart_<company id>`), so a refresh keeps it. `watchForUpdate` compares the page's `js/backend.js?v=<commit>` stamp with the live one and shows a Refresh bar when a newer version is published.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.

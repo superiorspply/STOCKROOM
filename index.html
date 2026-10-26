@@ -1669,10 +1669,11 @@ function profitBlock(sales){
 function renderReports(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Reports cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales || !state.loaded.items || !state.loaded.customers || !state.loaded.invoices){ host.append(h('p',{class:'empty'},'Loading reports…')); return; }
-  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
+  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping'],['tiktok','TikTok Shop']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
   host.append(rangeChips(state.rrange, renderList));
   const b = rangeBounds(state.rrange);
   if (state.rview==='shipping'){ renderShipping(b); return; }
+  if (state.rview==='tiktok'){ renderTikTok(b); return; }
   const sales = state.sales.filter(s=>inBounds(s.at, b));
   const owed = round2(allInvoices().filter(v=>!v.paid).reduce((a,v)=>a+v.balance,0));
   if (!sales.length){ host.append(h('p',{class:'empty'},'No sales in these dates.')); return; }
@@ -1716,6 +1717,109 @@ function renderShipping(b){
       h('span',{class:'attl'}, h('span',{}, v.customerName || 'No customer'), h('small',{}, v.no+' · '+fmtDate(v.first.at))), h('span',{class:'attv'}, money(shipOfInv(v))), h('span',{class:'attc','aria-hidden':'true'},'›')))));
 }
 
+
+/* ---------- TikTok Shop finance ---------- */
+// Payouts (statements) and per-order money lines pulled from TikTok by the tiktok server function.
+// TikTok sends amounts as strings, sometimes nested in breakdown objects; every "*_amount" field is shown,
+// so new or unusual fees appear without code changes.
+const TT_LABELS = {platform_commission:'TikTok commission', referral_fee:'Referral fee', transaction_fee:'Payment processing fee', affiliate_commission:'Creator (affiliate) commission',
+  affiliate_partner_commission:'Affiliate partner commission', affiliate_ads_commission:'Affiliate ads commission', actual_shipping_fee:'Shipping label cost', shipping_cost:'Shipping cost',
+  sfp_service_fee:'Shipped by TikTok fee', customer_paid_shipping_fee:'Shipping paid by customer', subtotal_before_discount:'Subtotal before discounts', seller_discount:'Your discounts',
+  refund_subtotal_before_discount:'Refunds', seller_discount_refund:'Discount refunds', revenue:'Revenue', fee:'Fees', fee_tax:'Fees and tax', settlement:'Paid to you', adjustment:'Adjustments',
+  net_sales:'Net sales', sales_tax:'Sales tax', platform_discount:'TikTok-funded discounts', live_specials_fee:'LIVE specials fee', voucher_xtra_service_fee:'Voucher Xtra fee',
+  flash_sales_service_fee:'Flash sale fee', bonus_cashback_service_fee:'Cashback program fee', dynamic_commission:'Dynamic commission', cod_service_fee:'Cash on delivery fee'};
+const ttNum = v => v && typeof v==='object' ? num(v.amount ?? v.value) : num(v);
+const ttLabel = k => { const b = k.replace(/_amount$/,''); return TT_LABELS[b] || b.replace(/_/g,' ').replace(/^./, c=>c.toUpperCase()); };
+// [key, value, group] for every amount in a record; group is '' for top-level totals.
+function ttAmounts(o, group, out){
+  for (const [k,v] of Object.entries(o||{})){
+    if (/_amount$/.test(k) && v!=null && v!=='' && isFinite(ttNum(v))) out.push([k, ttNum(v), group]);
+    else if (v && typeof v==='object' && !Array.isArray(v)) ttAmounts(v, k, out);
+  }
+  return out;
+}
+const ttTotals = recs => { const t = {}; for (const r of recs) for (const [k,v,g] of ttAmounts(r.data, '', [])) if (!g) t[k] = (t[k]||0)+v; return t; };
+// Every kind of money line across the records: the nested breakdown when TikTok sends one, else the top-level fields.
+function ttBreakdown(recs){
+  const m = new Map(); let nested = false;
+  for (const r of recs) if (ttAmounts(r.data, '', []).some(a=>a[2])) nested = true;
+  for (const r of recs) for (const [k,v,g] of ttAmounts(r.data, '', [])){
+    if (nested ? !g : k==='settlement_amount') continue;
+    const e = m.get(k) || {key:k, label:ttLabel(k), v:0, n:0}; e.v += v; if (v) e.n += 1; m.set(k, e);
+  }
+  return [...m.values()].filter(e=>Math.abs(e.v)>=0.005).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+}
+const ttTime = r => new Date(r.at || r.statement_time).getTime();
+let ttSyncing = null;
+function renderTikTok(b){
+  const box = h('div',{}, h('p',{class:'empty'},'Loading TikTok Shop…')); host.append(box);
+  const redraw = ()=>{ if (state.tab==='reports' && state.rview==='tiktok') renderList(); };
+  window.claude.use('tiktok').then(async tt=>{
+    const st = await tt.status();
+    if (!box.isConnected) return;
+    if (!st.connected){
+      const go = h('button',{class:'btn primary',type:'button',onclick:async()=>{ go.disabled = true; msg.textContent = 'Opening TikTok…'; try { await tt.connect(); } catch(e){ msg.textContent = e.message; go.disabled = false; } }},'Connect TikTok Shop');
+      const msg = h('p',{class:'hint'});
+      box.replaceChildren(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 6px'},'See what TikTok really pays you'),
+        h('p',{style:'margin:0 0 10px;color:var(--muted)'},'Connect your TikTok Shop to pull every payout and each order\'s fees: commission, payment processing, creator commission, shipping, refunds and adjustments. Only owners and admins can see this.'),
+        go, msg));
+      return;
+    }
+    const syncBtn = h('button',{class:'linkbtn',type:'button',onclick:()=>runSync(true)}, ttSyncing ? 'Syncing…' : 'Sync now');
+    const head = h('div',{class:'row wide',style:'margin-bottom:10px'},
+      h('div',{style:'display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap'},
+        h('div',{}, h('b',{}, st.shop || 'TikTok Shop'), h('div',{class:'meta',style:'margin:2px 0 0'}, ttSyncing ? 'Pulling from TikTok…' : st.syncedAt ? 'Updated '+fmtDateTime(st.syncedAt) : 'Not synced yet')),
+        h('div',{style:'display:flex;gap:6px'}, syncBtn, h('button',{class:'linkbtn',type:'button',onclick:async()=>{ if (!confirm('Disconnect TikTok Shop? Data already pulled stays.')) return; try { await tt.disconnect(); toast('TikTok Shop disconnected'); } catch(e){ toast(e.message); } redraw(); }},'Disconnect'))),
+      st.error ? h('p',{class:'err',style:'margin:8px 0 0'}, 'Last sync failed: '+st.error) : null);
+    function runSync(manual){
+      if (ttSyncing) return;
+      ttSyncing = (async()=>{
+        try { for (let i=0; i<6; i++){ const r = await tt.sync(); if (!r.more) break; } if (manual) toast('TikTok Shop is up to date'); }
+        catch(e){ toast(e.message); }
+        finally { ttSyncing = null; redraw(); }
+      })();
+      redraw();
+    }
+    // Automatic: pull new data when the page opens, at most once an hour.
+    if (!ttSyncing && !st.error && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false);
+    const d = await tt.data(b.from, b.to);
+    if (!box.isConnected) return;
+    const tx = d.transactions;
+    const out = [head];
+    if (!tx.length && !d.statements.length){ out.push(h('p',{class:'empty'}, ttSyncing ? 'Pulling your TikTok data. This can take a minute the first time.' : 'No TikTok payouts or orders in these dates.')); box.replaceChildren(...out); return; }
+    const t = ttTotals(tx);
+    const rev = t.revenue_amount||0, paid = t.settlement_amount||0, fees = (t.fee_amount ?? t.fee_tax_amount) || 0;
+    const ship = t.shipping_cost_amount||0, adj = t.adjustment_amount||0;
+    out.push(h('div',{class:'sum'}, stat(money(round2(rev)),'customers paid (revenue)'), stat(money(round2(paid)),'paid to you'), stat(rev>0 ? Math.round((rev-paid)/rev*100)+'%' : '–','kept by TikTok and costs')));
+    out.push(h('div',{class:'sum'}, stat(money(round2(fees)),'TikTok fees'), stat(money(round2(ship)),'shipping'), stat(money(round2(adj)),'adjustments')));
+    const orders = new Map(); for (const x of tx){ const k = x.order_id || x.id; const o = orders.get(k) || {id:k, t:ttTime(x), recs:[]}; o.recs.push(x); o.t = Math.min(o.t, ttTime(x)); orders.set(k, o); }
+    const bk = buckets(tx.map(x=>({t:ttTime(x), v:ttTotals([x]).settlement_amount||0})), b);
+    if (bk.rows.length>1) out.push(bucketChart('Paid to you', bk, v=>money(round2(v))));
+    const br = ttBreakdown(tx);
+    const line = e=>h('div',{class:'hrow2'}, h('span',{}, e.label, h('small',{class:'meta',style:'display:block;margin:0'}, e.n+' line'+(e.n===1?'':'s')+(rev>0 ? ' · '+Math.abs(Math.round(e.v/rev*1000)/10)+'% of revenue' : ''))), h('b',{style:e.v<0 ? 'color:var(--bad)' : ''}, money(round2(e.v))));
+    const outs = br.filter(e=>e.v<0), ins = br.filter(e=>e.v>0);
+    if (outs.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Where the money goes (fees and costs)'), outs.map(line)));
+    if (ins.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Money in'), ins.map(line)));
+    if (d.statements.length) out.push(h('div',{class:'row wide',style:'margin-bottom:10px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payouts'),
+      d.statements.slice(0,60).map(s=>h('div',{class:'hrow2'}, h('span',{}, fmtDate(s.statement_time), h('small',{class:'meta',style:'display:block;margin:0'}, String(s.data.payment_status||'').replace(/_/g,' ').toLowerCase())), h('b',{}, money(round2(ttNum(s.data.settlement_amount))))))));
+    const ol = [...orders.values()].sort((a,b)=>b.t-a.t);
+    out.push(h('div',{class:'row wide'}, h('div',{class:'hh',style:'margin:0 0 4px'}, 'Orders ('+ol.length+')'),
+      ol.slice(0,150).map(o=>{ const ot = ttTotals(o.recs); const r = ot.revenue_amount||0, p = ot.settlement_amount||0;
+        return h('button',{class:'att',type:'button',onclick:()=>openTikTokOrder(o)},
+          h('span',{class:'attl'}, h('span',{}, 'Order '+o.id), h('small',{}, fmtDate(o.t)+' · sold '+money(round2(r))+(r>0 ? ' · '+Math.round((r-p)/r*100)+'% to TikTok and costs' : ''))),
+          h('span',{class:'attv'}, money(round2(p))), h('span',{class:'attc','aria-hidden':'true'},'›')); }),
+      ol.length>150 ? h('p',{class:'hint'}, 'Showing the newest 150. Pick fewer dates to see the rest.') : null));
+    box.replaceChildren(...out);
+  }).catch(e=>{ if (box.isConnected) box.replaceChildren(h('p',{class:'empty'}, (e && e.message) || 'TikTok Shop is not available right now.')); });
+}
+function openTikTokOrder(o){
+  const t = ttTotals(o.recs);
+  openSheet('Order '+o.id, h('div',{},
+    h('div',{class:'sum'}, stat(money(round2(t.revenue_amount||0)),'revenue'), stat(money(round2(t.settlement_amount||0)),'paid to you')),
+    o.recs.map(x=>h('div',{class:'row wide',style:'margin-bottom:10px'},
+      h('div',{class:'hh',style:'margin:0 0 4px'}, String(x.data.type || 'Transaction').replace(/_/g,' ').toLowerCase().replace(/^./, c=>c.toUpperCase())+' · '+fmtDate(ttTime(x))),
+      ttAmounts(x.data, '', []).filter(([k,v])=>Math.abs(v)>=0.005).map(([k,v,g])=>h('div',{class:'hrow2'}, h('span',{}, ttLabel(k), g ? h('small',{class:'meta',style:'display:block;margin:0'}, ttLabel(g.replace(/_breakdown$/,''))) : null), h('b',{style:v<0 ? 'color:var(--bad)' : ''}, money(round2(v)))))))), {noFocus:true});
+}
 
 /* ---------- scanner ---------- */
 let onSheetClose = null;
@@ -3918,6 +4022,12 @@ renderStatus(); renderTab();
     if (!db){ state.status = 'offline'; renderStatus(); setBanner('Could not connect to your data, so nothing you enter will be kept. Check your connection and reload the page.'); renderList(); return; }
     state.db = db;
     loadCart(); if (state.cart.lines.length || state.cart.cid) drawCart();
+    window.claude.use('tiktok').then(async tt=>{
+      const p = tt.pending(); if (!p) return;
+      toast('Connecting TikTok Shop…');
+      try { const r = await tt.finish(p); toast('Connected '+(r.shop_name || 'TikTok Shop')); goTab('reports', {rview:'tiktok'}); }
+      catch(e){ setBanner('TikTok Shop did not connect: '+e.message); }
+    }).catch(()=>{});
     try { const can = user ? await user.can('data.write') : null; if (can===false){ state.canWrite = false; setBanner('You have view-only access. You can look at the data but not change it.'); } } catch(e){}
     state.status = 'live'; renderStatus();
     subscribe();

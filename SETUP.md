@@ -102,6 +102,40 @@ Both lead to the same review screen. Lines that match an item you already have a
 
 **Cost:** each scan is one request to Claude Opus 5.5 and usually costs a few cents, depending on the invoice's length. Scans that fail don't count toward the monthly limit. Anthropic's spend limit from step 1 is your hard cap.
 
+## TikTok Shop finance
+
+**Reports → TikTok Shop** shows what TikTok really pays you:
+- every payout
+- each order's money lines: TikTok commission, payment processing, creator (affiliate) commission, shipping, refunds and adjustments
+- totals for any dates
+
+Only owners and admins can see it. Once a company is connected, it updates automatically whenever someone opens the page (at most once an hour), and **Sync now** pulls the latest straight away.
+
+### Setting up TikTok Shop (once)
+
+1. **Create the app in TikTok Shop Partner Center** (partner.us.tiktokshop.com for a US shop)
+   1. Register as a developer using the **in-house seller** option.
+   2. Create a **Custom** app.
+   3. Set the **Redirect URL** to `https://stockroominc.com/`.
+   4. Under **Manage API**, request **Finance** (finance information) and **Authorization** (shop information).
+   5. Once TikTok approves the app, copy its **App Key**, **App Secret** and **Authorization link**.
+2. **Run the database update.** In the Supabase **SQL Editor**, run [`supabase/migrations/20261026000000_tiktok_finance.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261026000000_tiktok_finance.sql): copy the whole page, paste it, and click **Run**.
+3. **Store the app details in Supabase.** Go to **Edge Functions → Secrets** and add three secrets:
+   - `TIKTOK_APP_KEY`: the App Key
+   - `TIKTOK_APP_SECRET`: the App Secret
+   - `TIKTOK_AUTH_URL`: the Authorization link
+
+   Never put the App Secret in the site's code or config.js.
+4. **Add the TikTok function**
+   1. Go to **Edge Functions → Deploy a new function → Via Editor**.
+   2. Name it exactly `tiktok`.
+   3. Replace the sample code with everything in [`supabase/functions/tiktok/index.ts`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/functions/tiktok/index.ts).
+   4. Click **Deploy**.
+   5. In the function's **Details**, turn **Verify JWT** off. The function checks sign-in itself through the database.
+5. **Connect.** In Stockroom, go to **Reports → TikTok Shop → Connect TikTok Shop**, log in to TikTok, and approve. You come back to Stockroom, and the first sync pulls the last 90 days.
+
+The TikTok tokens are kept in a table that only the server function can read. Disconnecting removes them, and finance data already pulled stays.
+
 ## The domain (stockroominc.com)
 
 These steps are already done. They're here in case the domain ever needs setting up again.

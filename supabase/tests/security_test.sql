@@ -188,6 +188,42 @@ select t.fails($$select public.scan_begin((select v::uuid from ids where k='A'))
 select t.ok(t.count('select * from public.scan_log') = 0, 'another company cannot see the scan log');
 select t.fails($$select public.scan_begin((select v::uuid from ids where k='B'))$$, 'B is still switched off');
 
+-- TikTok Shop finance.
+reset role;
+insert into public.tiktok_links(company_id, shop_name, access_token, refresh_token) select v::uuid, 'A Shop', 'SECRET-ACCESS', 'SECRET-REFRESH' from ids where k = 'A';
+insert into public.tiktok_statements(company_id, id, statement_time, data) select v::uuid, 'S1', now(), '{"settlement_amount":"10"}' from ids where k = 'A';
+insert into public.tiktok_transactions(company_id, id, statement_id, at, data) select v::uuid, 'T1', 'S1', now(), '{"revenue_amount":"20"}' from ids where k = 'A';
+set role authenticated;
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select public.set_member_role((select v::uuid from ids where k='A'), '00000000-0000-0000-0000-0000000000a3', 'admin');
+select t.ok((select connected and shop_name = 'A Shop' from public.tiktok_status((select v::uuid from ids where k='A'))), 'owner sees the TikTok connection');
+select t.fails($$select * from public.tiktok_links$$, 'TikTok tokens cannot be read, even by the owner');
+select t.fails($$select * from public.tiktok_states$$, 'TikTok connection states cannot be read');
+select t.ok(t.count('select * from public.tiktok_statements') = 1 and t.count('select * from public.tiktok_transactions') = 1, 'owner can read TikTok payouts and orders');
+select t.fails($$insert into public.tiktok_transactions(company_id, id) select v::uuid, 'X' from ids where k = 'A'$$, 'TikTok data cannot be written from the app');
+create temp table tt(st text); grant all on tt to authenticated;
+insert into tt select public.tiktok_begin((select v::uuid from ids where k='A'));
+select t.ok((select st like 'tt%' and length(st) > 20 from tt), 'connecting gives a one-time state');
+select t.as_user('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+select t.fails($$select public.tiktok_take_state((select st from tt))$$, 'someone else cannot use that state');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok(public.tiktok_take_state((select st from tt)) = (select v::uuid from ids where k='A'), 'the person who started can finish connecting');
+select t.fails($$select public.tiktok_take_state((select st from tt))$$, 'a state works only once');
+select t.as_user('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+select t.ok(t.count('select * from public.tiktok_transactions') = 1, 'admins can read TikTok orders');
+select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
+select t.ok(t.count('select * from public.tiktok_transactions') = 0 and t.count('select * from public.tiktok_statements') = 0, 'viewers cannot see TikTok finances');
+select t.fails($$select * from public.tiktok_status((select v::uuid from ids where k='A'))$$, 'viewers cannot see the TikTok connection');
+select t.fails($$select public.tiktok_begin((select v::uuid from ids where k='A'))$$, 'viewers cannot connect TikTok');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.ok(t.count('select * from public.tiktok_transactions') = 0, 'another company cannot see TikTok orders');
+select t.fails($$select public.tiktok_disconnect((select v::uuid from ids where k='A'))$$, 'another company cannot disconnect TikTok');
+select t.ok((select not connected from public.tiktok_status((select v::uuid from ids where k='B'))), 'B is not connected');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select public.tiktok_disconnect((select v::uuid from ids where k='A'));
+select t.ok((select not connected from public.tiktok_status((select v::uuid from ids where k='A'))), 'owner can disconnect TikTok');
+select t.ok(t.count('select * from public.tiktok_transactions') = 1, 'disconnecting keeps the data already pulled');
+
 -- Signed out.
 reset role; set role anon;
 select t.ok(t.count('select 1 from information_schema.role_table_grants where grantee = ''anon'' and table_schema = ''public''') = 0, 'anon has no table access');

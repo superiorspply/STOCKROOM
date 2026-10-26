@@ -11,7 +11,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const env = (k: string) => Deno.env.get(k) || "";
+const env = (k: string) => (Deno.env.get(k) || "").trim();   // pasted secrets often carry a stray space or newline
 const API = () => env("TIKTOK_API_BASE") || "https://open-api.tiktokglobalshop.com";
 const AUTH = () => env("TIKTOK_AUTH_BASE") || "https://auth.tiktok-shops.com";
 // Finance API versions to try, newest first. TikTok retires old versions, so a failing one falls back to the next.
@@ -55,7 +55,10 @@ async function tokenCall(kind: "get" | "refresh", value: string) {
   else { q.set("refresh_token", value); q.set("grant_type", "refresh_token"); }
   const r = await fetch(AUTH() + "/api/v2/token/" + kind + "?" + q);
   const j = await r.json().catch(() => ({}));
-  if (j.code !== 0 || !j.data?.access_token) throw new Fail(502, "TikTok did not accept the connection: " + (j.message || r.statusText));
+  if (j.code !== 0 || !j.data?.access_token) {
+    const keys = /client_key|client_secret|app_key|app_secret|invalid app/i.test(j.message || "") ? " Check that TIKTOK_APP_KEY and TIKTOK_APP_SECRET in Supabase match the app in TikTok Partner Center." : "";
+    throw new Fail(502, "TikTok did not accept the connection: " + (j.message || r.statusText) + "." + keys);
+  }
   return {
     access_token: j.data.access_token, access_expires: unixIso(j.data.access_token_expire_in),
     refresh_token: j.data.refresh_token, refresh_expires: unixIso(j.data.refresh_token_expire_in),

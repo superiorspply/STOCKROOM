@@ -29,6 +29,7 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - The function connects through OAuth. The redirect URL is the site itself, and `backend.js` picks up `?code&state=tt…`.
   - It signs TikTok API calls and syncs statements and statement transactions into `tiktok_statements` / `tiktok_transactions`, which owners and admins can read.
   - Tokens live in `tiktok_links`, which only the service role can read.
+  - It is switched on per company in `tiktok_settings`, changed only by support via `support_set_tiktok`. The Reports chip is hidden unless `tiktok_status().enabled`.
   - The UI shows every `*_amount` field, nested ones included, so new fee types appear without code changes.
   - The dev server has a stand-in TikTok at `/mock-tiktok`. The test is `dev/tests/tiktok.mjs`.
 - Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.

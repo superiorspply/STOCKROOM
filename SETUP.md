@@ -109,7 +109,7 @@ Both lead to the same review screen. Lines that match an item you already have a
 - each order's money lines: TikTok commission, payment processing, creator (affiliate) commission, shipping, refunds and adjustments
 - totals for any dates
 
-Only owners and admins can see it. Once a company is connected, it updates automatically whenever someone opens the page (at most once an hour), and **Sync now** pulls the latest straight away.
+Only owners and admins can see it, and only in companies where support has switched it on: as support, open the company, then go to the person icon → **Support tools** → **TikTok Shop** and click **Save**. It is off for every other company. Once a company is connected, it updates automatically whenever someone opens the page (at most once an hour), and **Sync now** pulls the latest straight away.
 
 ### Setting up TikTok Shop (once)
 
@@ -119,7 +119,7 @@ Only owners and admins can see it. Once a company is connected, it updates autom
    3. Set the **Redirect URL** to `https://stockroominc.com/`.
    4. Under **Manage API**, request **Finance** (finance information) and **Authorization** (shop information).
    5. Once TikTok approves the app, copy its **App Key**, **App Secret** and **Authorization link**.
-2. **Run the database update.** In the Supabase **SQL Editor**, run [`supabase/migrations/20261026000000_tiktok_finance.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261026000000_tiktok_finance.sql): copy the whole page, paste it, and click **Run**.
+2. **Run the database updates.** In the Supabase **SQL Editor**, run [`supabase/migrations/20261026000000_tiktok_finance.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261026000000_tiktok_finance.sql), then [`supabase/migrations/20261026010000_tiktok_access.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261026010000_tiktok_access.sql). For each: copy the whole page, paste it, and click **Run**.
 3. **Store the app details in Supabase.** Go to **Edge Functions → Secrets** and add three secrets:
    - `TIKTOK_APP_KEY`: the App Key
    - `TIKTOK_APP_SECRET`: the App Secret

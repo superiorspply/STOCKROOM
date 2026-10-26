@@ -1,6 +1,9 @@
 // TikTok Shop finance: connect (through the stand-in TikTok), sync, and the fee breakdown in Reports.
 // Run against the local server (node dev/server.mjs): node dev/tests/tiktok.mjs
+import {execFileSync} from 'node:child_process';
 import {browser, context, page, SITE} from './helpers.mjs';
+// Support switches TikTok Shop on for a company (done here straight in the database).
+const enableTikTok = email => execFileSync('su', ['postgres', '-c', `psql -q -d ${process.env.DEV_DB || 'stockroom_dev'} -c "insert into public.tiktok_settings(company_id, enabled) select m.company_id, true from public.members m join auth.users u on u.id = m.user_id where u.email = '${email}' on conflict (company_id) do update set enabled = true"`]);
 
 const API = 'http://localhost:54321';
 const results = [], errs = [];
@@ -16,6 +19,12 @@ try {
   await P.getByLabel('Company name').fill('TikTok Test Co'); await P.getByRole('button', {name:'Create company'}).click();
   await P.locator('#status.live').waitFor({timeout:10000});
 
+  await P.getByRole('tab', {name:'Reports'}).click();
+  await P.getByRole('button', {name:'Shipping', exact:true}).waitFor();
+  await P.waitForTimeout(500);
+  check(await P.getByRole('button', {name:'TikTok Shop'}).count() === 0, 'TikTok Shop is hidden until support switches it on');
+  enableTikTok(`tiktok-${run}@shop.test`);
+  await P.reload(); await P.locator('#status.live').waitFor({timeout:10000});
   await P.getByRole('tab', {name:'Reports'}).click();
   await P.getByRole('button', {name:'TikTok Shop'}).click();
   await P.getByRole('button', {name:'Connect TikTok Shop'}).click();

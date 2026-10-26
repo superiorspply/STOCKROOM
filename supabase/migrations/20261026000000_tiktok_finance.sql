@@ -63,8 +63,9 @@ begin
   end if;
 end $$;
 
--- Whether the company is connected, without the tokens.
-create or replace function public.tiktok_status(cid uuid)
+-- Whether the company is connected, without the tokens. (Dropped first: a later migration adds a column.)
+drop function if exists public.tiktok_status(uuid);
+create function public.tiktok_status(cid uuid)
 returns table(connected boolean, shop_name text, connected_at timestamptz, synced_at timestamptz, sync_error text)
 language plpgsql stable security definer set search_path = '' as $$
 begin

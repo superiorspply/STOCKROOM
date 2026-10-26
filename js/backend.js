@@ -292,7 +292,7 @@ const runtime = {
         const {data, error} = await sb.rpc('tiktok_status', {cid:S.company.id});
         if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'TikTok Shop is not set up in the database yet.' : error.message);
         const r = data && data[0] || {};
-        return {connected:!!r.connected, shop:r.shop_name || '', connectedAt:r.connected_at, syncedAt:r.synced_at, error:r.sync_error || ''};
+        return {enabled:r.enabled !== false, connected:!!r.connected, shop:r.shop_name || '', connectedAt:r.connected_at, syncedAt:r.synced_at, error:r.sync_error || ''};
       },
       // Sends the browser to TikTok to approve the connection.
       async connect(){ const {url} = await call({action:'start'}); location.assign(url); },
@@ -761,7 +761,19 @@ async function openAccount(){
             msg.textContent = e2 ? err(e2) : 'Saved';
           }}, 'Save')), msg);
     });
-    parts.push(h('div', {class:'sec'}, 'Support tools'), scanBox,
+    const ttBox = h('div', {});
+    sb.rpc('tiktok_status', {cid:S.company.id}).then(({data, error}) => {
+      if (error || !data || !data[0] || data[0].enabled === undefined){ ttBox.replaceChildren(h('p', {class:'hint'}, 'The TikTok Shop switch is not set up in the database yet.')); return; }
+      const on = h('input', {type:'checkbox'}); on.checked = data[0].enabled;
+      const msg = h('span', {class:'hint', style:'margin:0'});
+      ttBox.replaceChildren(
+        h('div', {class:'linkbox'}, h('label', {class:'chk', style:'flex:1'}, on, h('span', {}, 'TikTok Shop for ' + S.company.name + (data[0].connected ? ' (connected)' : ''))),
+          h('button', {class:'btn', type:'button', onclick: async () => {
+            const {error:e2} = await sb.rpc('support_set_tiktok', {cid:S.company.id, on_off:on.checked});
+            msg.textContent = e2 ? err(e2) : 'Saved';
+          }}, 'Save')), msg);
+    });
+    parts.push(h('div', {class:'sec'}, 'Support tools'), scanBox, ttBox,
       h('p', {class:'hint', style:'margin:0 0 8px'}, 'One file with every company\u2019s items, customers, sales, invoices, employees, shifts, settings and team list. Photos stay stored online; the file keeps their links.'),
       go, status);
   }

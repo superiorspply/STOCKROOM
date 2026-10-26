@@ -179,11 +179,13 @@ try {
   // Support switches invoice scanning on for this company.
   await SP.locator('#acctBtn').click();
   await SP.getByText(/Invoice scanning for Acme Supply/).waitFor({timeout:8000});
-  await SP.locator('.acct label.chk input[type=checkbox]').check();
+  await SP.locator('.acct label.chk').filter({hasText:'Invoice scanning'}).locator('input[type=checkbox]').check();
   await SP.getByRole('spinbutton', {name:'Scans per month'}).fill('3');
   await SP.locator('.acct .linkbox').filter({hasText:'scans per month'}).getByRole('button', {name:'Save'}).click();
   await SP.getByText('Saved', {exact:true}).waitFor();
   check(true, 'support can switch scanning on');
+  await SP.getByText(/TikTok Shop for Acme Supply/).waitFor({timeout:8000});
+  check(!(await SP.locator('.acct label.chk').filter({hasText:'TikTok Shop'}).locator('input').isChecked()), 'TikTok Shop starts off, with a switch in Support tools');
   await SP.keyboard.press('Escape');
   if (await SP.locator('.backdrop').count()) await SP.locator('.backdrop .icon-btn').first().click();
 

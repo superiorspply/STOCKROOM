@@ -111,7 +111,8 @@ Deno.serve(async (req) => {
 
     if (body.action === "sync") {
       const cid = body.company_id;
-      await rpc("tiktok_status", { cid });   // owners and admins only
+      const st = await rpc("tiktok_status", { cid });   // owners and admins only
+      if (st?.[0]?.enabled === false) return reply(403, { error: "TikTok Shop is not turned on for this company." });
       const { data: link } = await admin.from("tiktok_links").select("*").eq("company_id", cid).maybeSingle();
       if (!link) return reply(400, { error: "TikTok Shop is not connected." });
       try { return reply(200, await sync(admin, link)); }

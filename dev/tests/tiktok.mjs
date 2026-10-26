@@ -60,6 +60,7 @@ try {
   // A second sync doesn't duplicate anything.
   await P.getByRole('button', {name:'Sync now'}).click();
   await P.getByText('TikTok Shop is up to date').waitFor({timeout:10000});
+  await P.getByRole('button', {name:/Order 5770001/}).first().waitFor({timeout:10000});
   const n = await P.getByRole('button', {name:/Order 5770001/}).count();
   check(n === 1, 'syncing again does not duplicate orders');
 

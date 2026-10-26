@@ -301,6 +301,12 @@ const runtime = {
       finish: p => call({action:'finish', code:p.code, state:p.state}),
       sync: () => call({action:'sync'}),
       async disconnect(){ const {error} = await sb.rpc('tiktok_disconnect', {cid:S.company.id}); if (error) throw appError(error); },
+      // Fills the flattened amounts for up to 2000 order lines pulled before the report migration; returns how many are left.
+      async prepare(){
+        const {data, error} = await sb.rpc('tiktok_prepare', {cid:S.company.id});
+        if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'The TikTok report needs a database update. Run the latest TikTok migration in Supabase.' : error.message);
+        return data || 0;
+      },
       // Totals for the report, worked out in the database: every amount field summed, paid per day, newest orders.
       async report(from, to){
         const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;

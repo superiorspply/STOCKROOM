@@ -1,6 +1,5 @@
 -- TikTok Shop report totals worked out in the database, so a busy shop's report loads quickly
 -- instead of downloading every order line to the browser. Safe to run more than once.
--- Adding the column below works through every order line already pulled, so the first run can take a few seconds.
 
 -- Every "*_amount" field in a TikTok record, flattened to {"<path>|<key>": number}. Path is where the field sits
 -- (e.g. "fee_tax_breakdown.fee"), empty for top-level totals. TikTok sends "12.34", 12.34 or {"amount": "12.34"}.
@@ -20,8 +19,40 @@ begin
   return out;
 end $$;
 
-alter table public.tiktok_transactions add column if not exists amounts jsonb generated always as (public.tiktok_flat(data)) stored;
+-- Each order line keeps its flattened amounts in "amounts", filled when it is written. Lines pulled before this
+-- migration are filled in batches by tiktok_prepare(), which the report page calls, so this runs quickly.
+-- (An earlier draft made "amounts" a generated column; adding that rewrote the whole table and could time out.)
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'tiktok_transactions'
+             and column_name = 'amounts' and is_generated = 'ALWAYS') then
+    alter table public.tiktok_transactions drop column amounts;
+  end if;
+end $$;
+alter table public.tiktok_transactions add column if not exists amounts jsonb;
 create index if not exists tiktok_transactions_order on public.tiktok_transactions(company_id, order_id);
+create index if not exists tiktok_transactions_unflat on public.tiktok_transactions(company_id) where amounts is null;
+
+create or replace function public.tiktok_fill_amounts() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.amounts := public.tiktok_flat(new.data);
+  return new;
+end $$;
+drop trigger if exists tiktok_fill_amounts on public.tiktok_transactions;
+create trigger tiktok_fill_amounts before insert or update of data on public.tiktok_transactions
+  for each row execute function public.tiktok_fill_amounts();
+
+-- Fills "amounts" for up to 2000 older lines of a company; returns how many are still left. Owners and admins only.
+create or replace function public.tiktok_prepare(cid uuid) returns int
+language plpgsql security definer set search_path = '' as $$
+declare left_over int;
+begin
+  perform public.tiktok_require_admin(cid);
+  update public.tiktok_transactions t set amounts = public.tiktok_flat(t.data)
+  where t.company_id = cid and t.id in (select id from public.tiktok_transactions where company_id = cid and amounts is null limit 2000);
+  select count(*) into left_over from public.tiktok_transactions where company_id = cid and amounts is null;
+  return left_over;
+end $$;
 
 -- Everything the TikTok Shop report shows for [t_from, t_to), as one JSON value:
 --   lines:  each amount field summed across the order lines, with where it sits (path; '' for top-level totals)
@@ -32,9 +63,9 @@ create or replace function public.tiktok_report(cid uuid, t_from timestamptz, t_
 returns jsonb
 language sql stable set search_path = '' as $$
   with tx as (
-    select t.id, coalesce(nullif(t.order_id, ''), t.id) as order_key, t.at, t.amounts,
-      (t.amounts ->> '|revenue_amount')::numeric as revenue, (t.amounts ->> '|settlement_amount')::numeric as paid
-    from public.tiktok_transactions t
+    select t.id, coalesce(nullif(t.order_id, ''), t.id) as order_key, t.at, a.amounts,
+      (a.amounts ->> '|revenue_amount')::numeric as revenue, (a.amounts ->> '|settlement_amount')::numeric as paid
+    from public.tiktok_transactions t, lateral (select coalesce(t.amounts, public.tiktok_flat(t.data)) as amounts) a
     where t.company_id = cid and (t_from is null or t.at >= t_from) and (t_to is null or t.at < t_to)
   ),
   lines as (
@@ -59,5 +90,6 @@ language sql stable set search_path = '' as $$
   )
 $$;
 
-revoke execute on function public.tiktok_report(uuid, timestamptz, timestamptz, text) from public, anon;
-grant execute on function public.tiktok_report(uuid, timestamptz, timestamptz, text) to authenticated;
+revoke execute on function public.tiktok_report(uuid, timestamptz, timestamptz, text), public.tiktok_prepare(uuid) from public, anon;
+grant execute on function public.tiktok_report(uuid, timestamptz, timestamptz, text), public.tiktok_prepare(uuid) to authenticated;
+grant execute on function public.tiktok_flat(jsonb, text) to authenticated, service_role;

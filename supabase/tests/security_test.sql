@@ -255,10 +255,10 @@ select t.ok(t.revenue() = 25, 'a deleted line is taken out of the totals');
 reset role; update public.tiktok_transactions set data = '{"revenue_amount":"20"}' where id = 'T1'; set role authenticated;
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
-select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'viewers get an empty TikTok report');
+select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load the TikTok report');
 select t.ok(t.count('select * from public.tiktok_hourly') = 0, 'viewers cannot read TikTok totals');
 select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
-select t.ok((select (r->>'order_count')::int = 0 from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'another company gets an empty TikTok report for A');
+select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load the TikTok report for A');
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 
 -- Signed out.

@@ -1846,9 +1846,10 @@ function renderTikTok(b){
       if (left > 0) body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.min(99, Math.round((1 - left/first)*100)))+'% done. The first time takes longest.'));
     }
     if (!box.isConnected) return;
-    let rep, stmts;
-    try { [rep, stmts] = await Promise.all([tt.report(b.from, b.to), tt.statements(b.from, b.to)]); }
-    catch(e){ throw new Error('Could not load the TikTok report: '+e.message); }
+    // One step at a time, so a slow or failing step is named (with how long it took).
+    const step = async (label, fn)=>{ const t0 = Date.now(); try { return await fn(); } catch(e){ throw new Error('Could not load '+label+' (after '+((Date.now()-t0)/1000).toFixed(1)+'s): '+e.message); } };
+    const rep = await step('the TikTok totals', ()=>tt.report(b.from, b.to));
+    const stmts = await step('the TikTok payouts', ()=>tt.statements(b.from, b.to));
     if (!box.isConnected) return;
     const out = [];
     if (!rep.order_count && !stmts.length){ body.replaceChildren(h('p',{class:'empty'}, ttSyncing ? 'Pulling your TikTok data. This can take a few minutes the first time.' : 'No TikTok payouts or orders in these dates.')); return; }

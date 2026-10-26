@@ -316,6 +316,11 @@ const runtime = {
       },
       // Payouts whose time falls in [from, to) (milliseconds).
       async statements(from, to){
+        const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
+        const r = await sb.rpc('tiktok_payouts', {cid:S.company.id, t_from:iso(from), t_to:iso(to)});
+        if (!r.error) return r.data.map(p => ({id:p.id, statement_time:p.statement_time, data:{settlement_amount:p.settlement_amount, payment_status:p.payment_status}}));
+        if (!/function|schema cache/i.test(r.error.message)) throw appError(r.error);
+        // Before the payouts migration: read the table directly.
         let q = sb.from('tiktok_statements').select('id, statement_time, data').eq('company_id', S.company.id).order('statement_time', {ascending:false}).limit(500);
         if (from > 0) q = q.gte('statement_time', new Date(from).toISOString());
         if (isFinite(to)) q = q.lt('statement_time', new Date(to).toISOString());

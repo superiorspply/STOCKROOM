@@ -1798,6 +1798,7 @@ const ttTime = r => new Date(r.at || r.statement_time).getTime();
 let ttSyncing = null;
 function renderTikTok(b){
   const box = h('div',{}, h('p',{class:'empty'},'Loading TikTok Shop…')); host.append(box);
+  let failBox = box;   // where an error shows: the whole box until the shop header is up, then just below it
   const redraw = ()=>{ if (state.tab==='reports' && state.rview==='tiktok') renderList(); };
   window.claude.use('tiktok').then(async tt=>{
     const st = await tt.status();
@@ -1828,12 +1829,26 @@ function renderTikTok(b){
     // Automatic: pull new data when the page opens, at most once an hour.
     if (!ttSyncing && !st.error && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false);
     const body = h('div',{}, h('p',{class:'empty'},'Adding up your TikTok numbers…'));
-    box.replaceChildren(head, body);
+    box.replaceChildren(head, body); failBox = body;
     // Order lines pulled before the report migration are prepared in batches the first time.
-    for (let left = await tt.prepare(), first = left; left > 0 && box.isConnected; left = await tt.prepare())
-      body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.round((1 - left/first)*100))+'% done. The first time takes longest.'));
+    // New or changed order lines are added into the running totals in batches. A batch that runs past the
+    // database's time limit is retried smaller; quick ones let the next batch grow.
+    let lim = 1000, first = null, left = 1;
+    while (left > 0 && box.isConnected){
+      const t0 = Date.now();
+      try { left = await tt.prepare(lim); }
+      catch(e){
+        if (!/timeout/i.test(e.message) || lim <= 50) throw new Error('Could not add TikTok orders to your totals: '+e.message);
+        lim = Math.max(50, Math.floor(lim/2)); continue;
+      }
+      if (first===null) first = left + lim;
+      if (Date.now()-t0 < 2500 && lim < 5000) lim *= 2;
+      if (left > 0) body.replaceChildren(h('p',{class:'empty'}, 'Adding new TikTok orders to your totals… '+Math.max(0, Math.min(99, Math.round((1 - left/first)*100)))+'% done. The first time takes longest.'));
+    }
     if (!box.isConnected) return;
-    const [rep, stmts] = await Promise.all([tt.report(b.from, b.to), tt.statements(b.from, b.to)]);
+    let rep, stmts;
+    try { [rep, stmts] = await Promise.all([tt.report(b.from, b.to), tt.statements(b.from, b.to)]); }
+    catch(e){ throw new Error('Could not load the TikTok report: '+e.message); }
     if (!box.isConnected) return;
     const out = [];
     if (!rep.order_count && !stmts.length){ body.replaceChildren(h('p',{class:'empty'}, ttSyncing ? 'Pulling your TikTok data. This can take a few minutes the first time.' : 'No TikTok payouts or orders in these dates.')); return; }
@@ -1856,7 +1871,7 @@ function renderTikTok(b){
           h('span',{class:'attv'}, money(round2(p))), h('span',{class:'attc','aria-hidden':'true'},'›')); }),
       rep.order_count>rep.orders.length ? h('p',{class:'hint'}, 'Showing the newest '+rep.orders.length+' orders. Pick fewer dates to see others.') : null));
     body.replaceChildren(...out);
-  }).catch(e=>{ if (box.isConnected) box.replaceChildren(h('p',{class:'empty'}, (e && e.message) || 'TikTok Shop is not available right now.')); });
+  }).catch(e=>{ const msg = h('p',{class:'empty'}, (e && e.message) || 'TikTok Shop is not available right now.'); if (failBox.isConnected) failBox.replaceChildren(msg); });
 }
 async function openTikTokOrder(tt, key){
   const box = h('div',{}, h('p',{class:'empty'},'Loading…'));

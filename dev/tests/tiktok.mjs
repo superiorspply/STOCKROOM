@@ -59,7 +59,7 @@ try {
   check((await card('Sales')).includes('$100.00'), 'sales have their own tab');
   await tab('For reference');
   const ref = await card('For reference');
-  check(ref.includes('Customer payment') && ref.includes('$107.50') && ref.includes('Fbm shipping cost'), 'reference figures are listed apart, not added up');
+  check(ref.includes('Customer payment') && ref.includes('$107.50') && ref.includes('Fbm shipping cost') && ref.includes('Referral fee'), 'reference figures (and breakdown lines repeated at the top level) are listed apart, not added up');
   await tab('Payouts');
   const vs = await card('Payouts compared with order lines');
   check(vs.includes('-$10.00') && vs.includes('$46.20') && (await card('Payouts \\(2\\)')).includes('matches its order lines and -$5.00 reserve'), 'payouts are checked with their reserve, and money paid out without order lines shows as the gap between payouts and order lines (' + vs + ')');

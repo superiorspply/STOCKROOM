@@ -1,5 +1,6 @@
 // Connects a company's TikTok Shop and pulls its finance data (payouts and each order's fees).
 // Deploy: Supabase dashboard -> Edge Functions -> deploy "tiktok" with this file (see SETUP.md), Verify JWT off.
+// An hourly job calls it with action "auto" (see supabase/setup/tiktok_auto_sync.sql).
 // Secrets: TIKTOK_APP_KEY, TIKTOK_APP_SECRET and TIKTOK_AUTH_URL (the app's authorization link from
 // TikTok Shop Partner Center). SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 // The app's redirect URL in Partner Center is the site itself (https://stockroominc.com/); the site passes
@@ -17,7 +18,7 @@ const AUTH = () => env("TIKTOK_AUTH_BASE") || "https://auth.tiktok-shops.com";
 // Finance API versions to try, newest first. TikTok retires old versions, so a failing one falls back to the next.
 const STATEMENT_VERSIONS = ["202309"];
 const TRANSACTION_VERSIONS = ["202501", "202309"];
-const FIRST_SYNC_DAYS = 90, OVERLAP_DAYS = 3, TIME_BUDGET_MS = 100_000;
+const FIRST_SYNC_DAYS = 90, OVERLAP_DAYS = 3, TIME_BUDGET_MS = 100_000, AUTO_BUDGET_MS = 130_000;
 
 class Fail extends Error { status: number; constructor(status: number, msg: string) { super(msg); this.status = status; } }
 function reply(status: number, body: unknown) {
@@ -120,6 +121,33 @@ Deno.serve(async (req) => {
         await admin.from("tiktok_links").update({ sync_error: String((e as Error).message) }).eq("company_id", cid);
         throw e;
       }
+    }
+    // The hourly job (supabase/setup/tiktok_auto_sync.sql): every connected company that has TikTok Shop on is
+    // synced and its new lines added into the totals, so the page is up to date when it opens.
+    if (body.action === "auto") {
+      const { data: cron } = await admin.from("tiktok_cron").select("secret").maybeSingle();
+      if (!cron?.secret || req.headers.get("x-cron-secret") !== cron.secret) return reply(403, { error: "Not allowed" });
+      const started = Date.now();
+      const { data: on } = await admin.from("tiktok_settings").select("company_id").eq("enabled", true);
+      const { data: links } = await admin.from("tiktok_links").select("*").in("company_id", (on || []).map((r: { company_id: string }) => r.company_id));
+      const companies = [];
+      for (const link of links || []) {
+        if (Date.now() - started > AUTO_BUDGET_MS) break;
+        try {
+          const r = await sync(admin, link);
+          let left = 1;
+          while (left > 0 && Date.now() - started < AUTO_BUDGET_MS) {
+            const { data, error } = await admin.rpc("tiktok_prepare_lines", { cid: link.company_id, lim: 2000 });
+            if (error) throw new Fail(500, error.message);
+            left = Number(data);
+          }
+          companies.push({ company_id: link.company_id, ...r, left });
+        } catch (e) {
+          await admin.from("tiktok_links").update({ sync_error: String((e as Error).message) }).eq("company_id", link.company_id);
+          companies.push({ company_id: link.company_id, error: String((e as Error).message) });
+        }
+      }
+      return reply(200, { companies });
     }
     return reply(400, { error: "Unknown action" });
   } catch (e) {

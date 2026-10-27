@@ -86,6 +86,14 @@ try {
   await P.locator('.sheet').getByRole('button', {name:'Close'}).click();
   await P.screenshot({path:'/tmp/stockroom-tiktok.png', fullPage:true});
 
+  // A sync while another is running for the shop skips itself.
+  const psql = q => execFileSync('su', ['postgres', '-c', `psql -qtA -d ${process.env.DEV_DB || 'stockroom_dev'} -c "${q}"`]).toString();
+  psql("update public.tiktok_links l set sync_started_at = now() from public.members m join auth.users u on u.id = m.user_id where m.company_id = l.company_id and u.email = 'tiktok-" + run + "@shop.test'");
+  await P.getByRole('button', {name:'Sync now'}).click();
+  await P.getByText('TikTok Shop is already syncing in the background').waitFor({timeout:10000});
+  check(true, 'a second sync while one is running skips itself instead of colliding');
+  psql("update public.tiktok_links set sync_started_at = null");
+
   // A second sync doesn't duplicate anything.
   await P.getByRole('button', {name:'Sync now'}).click();
   await P.getByText('TikTok Shop is up to date').waitFor({timeout:10000});

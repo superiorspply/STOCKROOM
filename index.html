@@ -1904,7 +1904,11 @@ function renderTikTok(b){
     function runSync(manual){
       if (ttSyncing) return;
       ttSyncing = (async()=>{
-        try { for (let i=0; i<6; i++){ const r = await tt.sync(); if (!r.more) break; } if (manual) toast('TikTok Shop is up to date'); }
+        try {
+          let busy = false;
+          for (let i=0; i<6; i++){ const r = await tt.sync(); busy = !!r.busy; if (!r.more) break; }
+          if (manual) toast(busy ? 'TikTok Shop is already syncing in the background' : 'TikTok Shop is up to date');
+        }
         catch(e){ toast(e.message); }
         finally { ttSyncing = null; redraw(); }
       })();

@@ -283,6 +283,7 @@ select t.ok(not exists (select 1 from public.tiktok_hourly where k like 'adjustm
 set role authenticated;
 select t.fails($$select public.tiktok_prepare_lines((select v::uuid from ids where k='A'), 10)$$, 'people cannot run the hourly TikTok job''s totals step directly');
 select t.fails($$select * from public.tiktok_cron$$, 'people cannot read the hourly TikTok job''s secret');
+select t.fails($$select public.tiktok_sync_begin((select v::uuid from ids where k='A'))$$, 'people cannot take or release the TikTok sync directly');
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load the TikTok report');
 select t.fails($$select public.tiktok_payouts((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load TikTok payouts');

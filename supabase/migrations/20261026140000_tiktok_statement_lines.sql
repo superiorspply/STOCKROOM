@@ -2,7 +2,7 @@
 -- payouts on each page load, which ran past the time limit for a busy shop. Each payout's order lines are now
 -- kept as running totals, like the hourly report totals: added by tiktok_prepare_lines, taken out by the
 -- same triggers. The first run fills them from the lines already added up (close the TikTok page while it
--- runs). Also lets only one TikTok sync run at a time. Safe to run more than once.
+-- runs). Safe to run more than once.
 
 do $$ begin
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'tiktok_statement_lines') then
@@ -23,25 +23,6 @@ end $$;
 alter table public.tiktok_statement_lines enable row level security;   -- read through tiktok_payouts()
 revoke all on public.tiktok_statement_lines from anon, authenticated;
 grant all on public.tiktok_statement_lines to service_role;
-
--- When a sync started, so only one runs at a time (see the tiktok function's sync()).
-alter table public.tiktok_links add column if not exists sync_started_at timestamptz;
--- Takes the shop for a sync unless another started less than 3 minutes ago (longer than one sync runs);
--- false means one is already running.
-create or replace function public.tiktok_sync_begin(cid uuid) returns boolean
-language sql set search_path = '' as $$
-  with took as (
-    update public.tiktok_links set sync_started_at = now()
-    where company_id = cid and (sync_started_at is null or sync_started_at < now() - interval '3 minutes')
-    returning 1)
-  select exists (select 1 from took)
-$$;
-create or replace function public.tiktok_sync_end(cid uuid) returns void
-language sql set search_path = '' as $$
-  update public.tiktok_links set sync_started_at = null where company_id = cid
-$$;
-revoke execute on function public.tiktok_sync_begin(uuid), public.tiktok_sync_end(uuid) from public, anon, authenticated;
-grant execute on function public.tiktok_sync_begin(uuid), public.tiktok_sync_end(uuid) to service_role;
 
 -- Adds (sign 1) or takes away (sign -1) one line in its payout's totals.
 create or replace function public.tiktok_roll_statement(cid uuid, sid text, a jsonb, sign int) returns void

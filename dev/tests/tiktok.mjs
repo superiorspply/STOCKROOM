@@ -92,11 +92,24 @@ try {
   await P.getByRole('button', {name:'Sync now'}).click();
   await P.getByText('TikTok Shop is already syncing in the background').waitFor({timeout:10000});
   check(true, 'a second sync while one is running skips itself instead of colliding');
-  psql("update public.tiktok_links set sync_started_at = null");
+  // While the hourly job holds the shop and the data is over an hour old, the page tries its own sync once,
+  // not on every redraw.
+  let syncCalls = 0;
+  const countSync = r => { if (r.url().includes('/functions/v1/tiktok') && (r.postData() || '').includes('"sync"')) syncCalls++; };
+  psql("update public.tiktok_links set sync_started_at = now(), synced_at = now() - interval '2 hours'");
+  await P.reload(); await P.locator('#status.live').waitFor({timeout:10000});
+  P.on('request', countSync);
+  await P.getByRole('tab', {name:'Reports'}).click();
+  await P.getByRole('button', {name:'TikTok Shop'}).click();
+  await P.waitForTimeout(5000);
+  P.off('request', countSync);
+  check(syncCalls <= 1, 'the page does not keep retrying a sync the hourly job is already running (' + syncCalls + ' tries)');
+  psql("update public.tiktok_links set sync_started_at = null, synced_at = now()");
 
   // A second sync doesn't duplicate anything.
   await P.getByRole('button', {name:'Sync now'}).click();
   await P.getByText('TikTok Shop is up to date').waitFor({timeout:10000});
+  await P.locator('.tttabs').getByRole('tab', {name:'Orders', exact:true}).click();
   await P.getByRole('button', {name:/Order 5770001/}).first().waitFor({timeout:10000});
   const n = await P.getByRole('button', {name:/Order 5770001/}).count();
   check(n === 1, 'syncing again does not duplicate orders');

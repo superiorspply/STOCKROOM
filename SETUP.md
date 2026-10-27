@@ -133,7 +133,8 @@ Only owners and admins can see it, and only in companies where support has switc
    4. Click **Deploy**.
    5. In the function's **Details**, turn **Verify JWT** off. The function checks sign-in itself through the database.
 5. **Connect.** In Stockroom, go to **Reports → TikTok Shop → Connect TikTok Shop**, log in to TikTok, and approve. You come back to Stockroom, and the first sync pulls the last 90 days.
-6. **Keep it synced every hour.** In the **SQL Editor**, run [`supabase/setup/tiktok_auto_sync.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/setup/tiktok_auto_sync.sql). It schedules a job that calls the TikTok function every hour with a secret only the database and the function can read, so the numbers are up to date even when nobody opens the page.
+6. **Fill the payout checks (once).** After `20261026140000_tiktok_statement_lines.sql`, run [`supabase/setup/tiktok_statement_lines_fill.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/setup/tiktok_statement_lines_fill.sql) again and again until `statements_left` is 0, with the TikTok page closed.
+7. **Keep it synced every hour.** In the **SQL Editor**, run [`supabase/setup/tiktok_auto_sync.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/setup/tiktok_auto_sync.sql). It schedules a job that calls the TikTok function every hour with a secret only the database and the function can read, so the numbers are up to date even when nobody opens the page.
 
 The TikTok tokens are kept in a table that only the server function can read. Disconnecting removes them, and finance data already pulled stays.
 

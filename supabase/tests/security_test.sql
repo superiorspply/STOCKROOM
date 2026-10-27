@@ -277,6 +277,8 @@ insert into public.tiktok_statements(company_id, id, statement_time, data) selec
 insert into public.tiktok_transactions(company_id, id, statement_id, at, data) select v::uuid, 'T8', 'S8', '2025-12-01 10:00+00', '{"revenue_amount":"50"}' from ids where k = 'A';
 select t.ok((select at = '2026-01-02 10:00+00' from public.tiktok_transactions where id = 'T8'), 'a line of a payout from orders counts on its statement date');
 delete from public.tiktok_transactions where id in ('T8', 'T9'); delete from public.tiktok_statements where id in ('S8', 'S9');
+select t.ok((select n = 1 from public.tiktok_statement_lines where statement_id = 'S1') and not exists (select 1 from public.tiktok_statement_lines where statement_id in ('S8', 'S9') and n <> 0),
+  'each payout keeps a running count of its order lines through changes and deletes');
 select t.ok(not exists (select 1 from public.tiktok_hourly where k like 'adjustment_by_type%' and total <> 0), 'a deleted adjustment is taken out of the totals');
 set role authenticated;
 select t.fails($$select public.tiktok_prepare_lines((select v::uuid from ids where k='A'), 10)$$, 'people cannot run the hourly TikTok job''s totals step directly');

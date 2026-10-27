@@ -1,8 +1,8 @@
 -- The TikTok payouts check (each payout against its order lines) added up every order line of the shown
 -- payouts on each page load, which ran past the time limit for a busy shop. Each payout's order lines are now
 -- kept as running totals, like the hourly report totals: added by tiktok_prepare_lines, taken out by the
--- same triggers. The first run fills them from the lines already added up (close the TikTok page while it
--- runs). Safe to run more than once.
+-- same triggers. Payouts already added up are filled by supabase/setup/tiktok_statement_lines_fill.sql, run in
+-- small batches (a single fill of a busy shop ran past the SQL editor's time limit). Safe to run more than once.
 
 do $$ begin
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'tiktok_statement_lines') then
@@ -14,10 +14,6 @@ do $$ begin
       reserve numeric not null default 0,    -- their reserve_amount
       primary key (company_id, statement_id)
     );
-    insert into public.tiktok_statement_lines(company_id, statement_id, n, paid, reserve)
-    select company_id, statement_id, count(*), sum(coalesce((amounts ->> '|settlement_amount')::numeric, 0)),
-      sum(coalesce((amounts ->> '|reserve_amount')::numeric, 0))
-    from public.tiktok_transactions where rolled_up and stamped and statement_id is not null group by 1, 2;
   end if;
 end $$;
 alter table public.tiktok_statement_lines enable row level security;   -- read through tiktok_payouts()

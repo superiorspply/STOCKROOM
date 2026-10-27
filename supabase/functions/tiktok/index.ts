@@ -156,8 +156,19 @@ Deno.serve(async (req) => {
   }
 });
 
+// One sync at a time per shop: the page's sync, Sync now and the hourly job would otherwise write the same
+// order lines together and wait on each other until the database gives up. A sync takes the shop for up to
+// 3 minutes (longer than one sync runs); a second one meanwhile returns { busy: true } without doing anything.
 // deno-lint-ignore no-explicit-any
 async function sync(admin: any, link: any) {
+  const { data: got, error } = await admin.rpc("tiktok_sync_begin", { cid: link.company_id });
+  if (!error && !got) return { busy: true, more: false, statements: 0, synced: 0, left: 0, transactions: 0 };
+  try { return await syncNow(admin, link); }
+  finally { if (!error) await admin.rpc("tiktok_sync_end", { cid: link.company_id }); }
+}
+
+// deno-lint-ignore no-explicit-any
+async function syncNow(admin: any, link: any) {
   const started = Date.now();
   if (!link.access_expires || new Date(link.access_expires).getTime() < Date.now() + 86_400_000) {
     if (link.refresh_expires && new Date(link.refresh_expires).getTime() < Date.now()) {

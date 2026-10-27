@@ -1880,6 +1880,7 @@ const ttTime = r => new Date(r.at || r.statement_time).getTime();
 const ttUtcBound = t => { if (!(t > 0) || !isFinite(t)) return t; const d = new Date(t); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
 const ttDay = t => { const d = new Date(t); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).getTime(); };
 let ttSyncing = null;
+let ttAutoAt = 0;   // when the page last started a sync on its own
 function renderTikTok(b){
   const box = h('div',{class:'ttwrap'}, h('p',{class:'empty'},'Loading TikTok Shop…')); host.append(box);
   let failBox = box;   // where an error shows: the whole box until the shop header is up, then just below it
@@ -1916,7 +1917,12 @@ function renderTikTok(b){
     }
     // Automatic: pull new data when the page opens, at most once an hour. It starts once the totals below are
     // added up: both write the same order lines, and running together made each wait on the other until timeout.
-    const autoSync = ()=>{ if (!ttSyncing && (!st.syncedAt || Date.now()-new Date(st.syncedAt).getTime() > 3600e3)) runSync(false); };
+    // At most once every 10 minutes: a sync that fails, or finds the hourly job already syncing, leaves the data
+    // as old as before, and trying again on every redraw made the page flicker.
+    const autoSync = ()=>{
+      if (ttSyncing || Date.now()-ttAutoAt < 600e3 || (st.syncedAt && Date.now()-new Date(st.syncedAt).getTime() <= 3600e3)) return;
+      ttAutoAt = Date.now(); runSync(false);
+    };
     const body = h('div',{}, h('p',{class:'empty'},'Adding up your TikTok numbers…'));
     box.replaceChildren(head, body); failBox = body;
     // Order lines pulled before the report migration are prepared in batches the first time.

@@ -212,6 +212,12 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .paybox{border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;background:var(--surface2)}
 .paystat{display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:6px}
 .payline{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+.goalbar{position:relative;height:16px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);margin:8px 0 4px}
+.goalbar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),#ff6b78);min-width:4px}
+.goalbar b{position:absolute;top:-5px;bottom:-5px;width:2px;margin-left:-1px;background:var(--ink);border-radius:2px}
+.goalbig{margin:8px 0 0}.goalbig b{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:26px;letter-spacing:-.02em}.goalbig span{color:var(--muted);font-size:14px}
+.goalpace{margin:8px 0 10px;font-weight:600;color:var(--ok)}.goalpace.bad{color:var(--bad)}.goalstats{margin:6px 0 10px}.goalstats .stat b{font-size:18px}
+.goalchart svg{width:100%;height:auto;display:block}.ttlinkcard{cursor:pointer}.ttlinkcard:hover{border-color:var(--accent)}
 .carrybox{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:-4px 0 12px}
 .payline.linkrow{width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.payline.owed{font-size:16px;border-bottom:0}
 .payrow{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}.paym{font-weight:600;font-size:14px}
@@ -549,6 +555,7 @@ function subscribe(){
   state.db.doc('settings/timeclock').onSnapshot(d=>{ state.clock = d.exists ? (d.data()||{}) : {}; }, ()=>{});
   state.db.doc('settings/business').onSnapshot(d=>{ state.business = d.exists ? String((d.data()||{}).text||'') : ''; }, ()=>{});
   state.db.doc('settings/invoicing').onSnapshot(d=>{ state.carryDefault = d.exists && !!(d.data()||{}).carryBalance; }, ()=>{});
+  state.db.doc('settings/tiktok_goal').onSnapshot(d=>{ state.ttGoal = d.exists ? (d.data()||{}) : null; }, ()=>{});
   for (const name of ['items','customers','sales','invoices']){
     state.db.collection(name).onSnapshot(snap=>{
       state[name] = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
@@ -1945,6 +1952,94 @@ function ttPayoutCheck(s){
   if (!s.lines) return ['none','TikTok lists no order lines for it'];
   return ['off','its order lines differ by '+money(d)];
 }
+// TikTok sales goal: one goal per company (settings/tiktok_goal), counted in TikTok net sales by its UTC day,
+// the same figure as Seller Center's Finance reports. TikTok counts a sale when it settles it, so the last
+// few days fill in later.
+const TT_GOAL_DEFAULT = {title:'Holiday sales goal', start:'2026-11-01', end:'2027-01-15', amount:4500000};
+const ttGoal = () => Object.assign({}, TT_GOAL_DEFAULT, state.ttGoal || {});
+const utcOf = ymd => { const [y,m,d] = String(ymd).split('-').map(Number); return Date.UTC(y, m-1, d); };
+const shortMoney = v => { const a = Math.abs(v), sg = v<0 ? '-' : ''; return a>=1e6 ? sg+'$'+(a/1e6).toFixed(2).replace(/\.?0+$/,'')+'M' : a>=1e4 ? sg+'$'+Math.round(a/1e3)+'k' : money(round2(v)); };
+function ttGoalStats(g, days){
+  const start = utcOf(g.start), end = utcOf(g.end) + DAY, total = Math.max(1, Math.round((end-start)/DAY));
+  const n = new Date(), today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+  const elapsed = Math.max(0, Math.min(total, Math.round((today-start)/DAY)+1));   // days so far, today included
+  const by = new Map(days.map(d=>[String(d.day).slice(0,10), num(d.sales)]));
+  let cum = 0; const series = [];
+  for (let i=0;i<total;i++){ const t = start+i*DAY, v = by.get(new Date(t).toISOString().slice(0,10)) || 0; cum += v; series.push({t, v, cum}); }
+  const sold = round2(cum), goal = num(g.amount), left = round2(Math.max(0, goal-sold));
+  const daysLeft = elapsed>=total ? 0 : total-elapsed+1;   // today counts as a day still to sell
+  const done = series.slice(0, elapsed), avg = elapsed ? sold/elapsed : 0;
+  const last7 = done.slice(-7), best = done.reduce((b,x)=>x.v>b.v ? x : b, {v:0, t:0});
+  return {start, end, total, elapsed, daysLeft, series, sold, goal, left, pct:goal>0 ? sold/goal : 0, shouldPct:elapsed/total,
+    should:goal*elapsed/total, avg, needed:daysLeft ? left/daysLeft : 0, projected:avg*total,
+    last7:last7.length ? last7.reduce((a,x)=>a+x.v,0)/last7.length : 0, best};
+}
+function ttGoalChart(st){
+  // Drawn at about the size it shows, so the text stays readable on a phone and the chart stays short on a wide screen.
+  const W = Math.max(300, Math.min(1100, window.innerWidth - (isDesk() ? 330 : 64))), H = 200, PL = 8, PR = 8, PT = 18, PB = 22, top = Math.max(st.goal, st.sold)*1.05 || 1;
+  const x = i => PL+(W-PL-PR)*i/Math.max(1, st.total-1), y = v => PT+(H-PT-PB)*(1-v/top);
+  const pts = st.series.slice(0, Math.max(1, st.elapsed)).map((p,i)=>x(i).toFixed(1)+' '+y(p.cum).toFixed(1)).join(' L');
+  const wrap = h('div',{class:'chart goalchart'});
+  wrap.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sales so far against the goal">'
+    + '<line x1="'+x(0)+'" y1="'+y(0)+'" x2="'+x(st.total-1)+'" y2="'+y(st.goal)+'" stroke="var(--muted)" stroke-dasharray="5 5"/>'
+    + '<text x="'+(W-PR)+'" y="'+(y(st.goal)-6)+'" fill="var(--muted)" font-size="10" text-anchor="end">Goal '+esc(shortMoney(st.goal))+'</text>'
+    + '<line x1="'+PL+'" x2="'+(W-PR)+'" y1="'+(H-PB)+'" y2="'+(H-PB)+'" stroke="var(--line)"/>'
+    + (st.elapsed ? '<path d="M'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>' : '')
+    + '<text x="'+PL+'" y="'+(H-6)+'" fill="var(--muted)" font-size="10">'+esc(fmtDate(ttDay(st.start)))+'</text><text x="'+(W-PR)+'" y="'+(H-6)+'" fill="var(--muted)" font-size="10" text-anchor="end">'+esc(fmtDate(ttDay(st.end-DAY)))+'</text></svg>';
+  return wrap;
+}
+// The goal card: compact (Overview, opens the Goal tab) or in full with its stats and chart.
+function ttGoalCard(daysP, compact, onOpen){
+  const box = h('div',{class:'row wide ttcard goalcard'}, h('p',{class:'hint',style:'margin:0'},'Loading your sales goal…'));
+  daysP.then(days=>{
+    const g = ttGoal(), st = ttGoalStats(g, days);
+    const pct = Math.min(1, st.pct), should = Math.min(1, st.shouldPct), ahead = round2(st.sold-st.should);
+    const head = h('div',{style:'display:flex;justify-content:space-between;align-items:baseline;gap:10px'},
+      h('div',{class:'hh',style:'margin:0'}, g.title), h('span',{class:'meta',style:'margin:0'}, fmtDate(ttDay(st.start))+' – '+fmtDate(ttDay(st.end-DAY))));
+    const bar = h('div',{class:'goalbar',role:'progressbar','aria-valuemin':'0','aria-valuemax':String(st.goal),'aria-valuenow':String(st.sold),'aria-label':'Sales toward the goal'},
+      h('i',{style:'width:'+(pct*100).toFixed(2)+'%'}), st.elapsed && st.daysLeft ? h('b',{style:'left:'+(should*100).toFixed(2)+'%',title:'Where you need to be today to stay on pace'}) : null);
+    const big = h('div',{class:'goalbig'}, h('b',{}, money(round2(st.sold))), h('span',{}, ' of '+money(st.goal)+' · '+(Math.round(st.pct*1000)/10)+'%'));
+    const pace = !st.elapsed ? 'Starts '+fmtDate(ttDay(st.start))+'.' : st.sold>=st.goal ? 'Goal reached!' : !st.daysLeft ? 'Ended '+money(st.left)+' short.'
+      : (ahead>=0 ? money(ahead)+' ahead of pace' : money(-ahead)+' behind pace')+' · '+money(round2(st.needed))+' a day needed for the '+st.daysLeft+' day'+(st.daysLeft===1?'':'s')+' left';
+    if (compact){
+      box.replaceChildren(head, big, bar, h('p',{class:'hint',style:'margin:6px 0 0'}, pace));
+      box.classList.add('ttlinkcard'); box.tabIndex = 0; box.setAttribute('role','button');
+      box.onclick = onOpen; box.onkeydown = e=>{ if (e.key==='Enter' || e.key===' '){ e.preventDefault(); onOpen(); } };
+      return;
+    }
+    const edit = state.isAdmin ? h('button',{class:'linkbtn',type:'button',onclick:openGoalEdit},'Edit goal') : null;
+    box.replaceChildren(head, big, bar, h('p',{class:pace.includes('behind') ? 'goalpace bad' : 'goalpace'}, pace),
+      h('div',{class:'sum goalstats'},
+        stat(money(st.left),'left to go'), stat(String(st.daysLeft),'days left'), stat(money(round2(st.needed)),'needed per day'),
+        stat(money(round2(st.avg)),'average per day so far'), stat(money(round2(st.last7)),'average, last 7 days'), stat(shortMoney(st.projected),'on pace for by '+fmtDate(ttDay(st.end-DAY)))),
+      ttGoalChart(st),
+      h('div',{class:'hrow2'}, h('span',{},'Best day'), h('b',{}, st.best.v>0 ? money(round2(st.best.v))+' · '+fmtDate(ttDay(st.best.t)) : '–')),
+      h('div',{class:'hrow2'}, h('span',{},'Days in the goal'), h('b',{}, st.elapsed+' of '+st.total+' so far')),
+      h('p',{class:'hint',style:'margin:8px 0 0'}, 'Counted in TikTok net sales on the day TikTok settles them, the same as Seller Center\'s Finance reports, so the last few days fill in as TikTok settles orders.'),
+      edit);
+  }).catch(e=>box.replaceChildren(h('p',{class:'hint',style:'margin:0'}, e.message)));
+  return box;
+}
+function openGoalEdit(){
+  const g = ttGoal();
+  const title = h('input',{type:'text',value:g.title,autocomplete:'off'});
+  const amount = h('input',{type:'number',min:'1',step:'any',inputmode:'decimal',value:String(g.amount)});
+  const start = h('input',{type:'date',value:g.start}), end = h('input',{type:'date',value:g.end});
+  const err = h('p',{class:'err'}); const btn = h('button',{class:'btn primary',type:'submit'},'Save goal');
+  const form = h('form',{novalidate:true}, field('Name', title), field('Sales goal ($)', amount),
+    h('div',{class:'grid2'}, field('From', start), field('To', end)), err,
+    h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:closeSheet},'Cancel'), btn));
+  form.addEventListener('submit', async e=>{
+    e.preventDefault(); err.textContent = '';
+    if (!(num(amount.value)>0)){ err.textContent = 'Enter a goal amount.'; return; }
+    if (!start.value || !end.value || end.value<start.value){ err.textContent = 'Pick a start date and an end date after it.'; return; }
+    btn.disabled = true;
+    const v = {title:title.value.trim() || TT_GOAL_DEFAULT.title, amount:round2(num(amount.value)), start:start.value, end:end.value, updatedAt:nowIso()};
+    const ok = await write(()=>state.db.doc('settings/tiktok_goal').set(v));
+    if (ok){ state.ttGoal = v; closeSheet(); toast('Goal saved'); renderList(); } else btn.disabled = false;
+  });
+  openSheet('TikTok sales goal', form);
+}
 const ttTime = r => new Date(r.at || r.statement_time).getTime();
 // TikTok's calendar is UTC: a local day's start as that same date's UTC midnight, and a time shown on its UTC date.
 const ttUtcBound = t => { if (!(t > 0) || !isFinite(t)) return t; const d = new Date(t); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
@@ -2048,7 +2143,9 @@ function renderTikTok(b){
       secTotal('creator') ? stat(money(round2(secTotal('creator'))),'creator commissions') : null, ...shipTiles(),
       stat(rev>0 ? Math.round(-costs/rev*100)+'%' : '–','of sales to fees and shipping'), pres.count ? stat(money(round2(payouts)),'paid out (TikTok statements)') : stat(money(round2(paid)),'paid to you'));
     // Tabs jump straight to one part of the report; the one picked stays picked when the page is redrawn.
-    const views = [['overview','Overview']].concat(secs.map(s=>[s.id, s.title]), secs.reference.length ? [['reference','For reference']] : [],
+    // The goal's daily sales load once per page, only when the Overview or Goal tab needs them.
+    let goalDays = null; const goalP = ()=>goalDays || (goalDays = (()=>{ const g = ttGoal(); return tt.dailySales(utcOf(g.start), utcOf(g.end)+DAY); })());
+    const views = [['overview','Overview'],['goal','Goal']].concat(secs.map(s=>[s.id, s.title]), secs.reference.length ? [['reference','For reference']] : [],
       stmts.length ? [['payouts','Payouts']] : [], [['orders','Orders']]);
     const tabs = h('div',{class:'chips tttabs',role:'tablist'}), view = h('div',{});
     const show = k=>{
@@ -2070,12 +2167,13 @@ function renderTikTok(b){
           Math.abs(gap)>=0.01 ? h('p',{class:'hint',style:'margin:6px 0 0'}, 'TikTok\'s breakdown does not add up to the payout by '+money(Math.abs(gap))+'.') : null);
         const bk = buckets(rep.days.map(d=>{ const [y,m,dd] = String(d.day).split('-').map(Number); return {t:new Date(y, m-1, dd).getTime(), v:num(d.paid)}; }), b);
         const biggest = secs.filter(s=>s.id!=='sales').flatMap(s=>s.lines.map(e=>Object.assign({title:s.title}, e))).filter(e=>e.v<0).sort((a,b)=>a.v-b.v).slice(0,6);
-        const right = h('div',{}, stmtCard(), checkCard(), bk.rows.length>1 ? bucketChart('Paid to you', bk, v=>money(round2(v))) : null,
+        const right = h('div',{}, ttGoalCard(goalP(), true, ()=>show('goal')), stmtCard(), checkCard(), bk.rows.length>1 ? bucketChart('Paid to you', bk, v=>money(round2(v))) : null,
           biggest.length ? h('div',{class:'row wide ttcard'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Biggest costs'),
             biggest.map(e=>h('button',{class:'hrow2 ttlink',type:'button',onclick:()=>show(e.sec)}, h('span',{}, e.label, h('small',{class:'meta ttsub'}, e.title+(rev>0 ? ' · '+pct(e.v) : ''))), h('span',{class:'ttamt'}, amt(e.v), h('i',{'aria-hidden':'true'},'›'))))) : null,
           compare());
         return [h('div',{class:'ttgrid'}, sum, right)];
       }
+      if (k==='goal') return [ttGoalCard(goalP(), false)];
       const sec = secs.find(s=>s.id===k);
       if (sec) return [ttSectionCard(sec, rev, true)];
       if (k==='reference') return [ttRefCard(secs.reference)];

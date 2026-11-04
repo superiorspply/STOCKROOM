@@ -243,6 +243,7 @@ reset role; select t.ok((select amounts is not null from public.tiktok_transacti
 select t.ok((select (r->>'count')::int = 1 and jsonb_array_length(r->'list') = 1 and (r->'totals'->>'settlement_amount')::numeric = 10
   and (r->'list'->0->>'lines')::int = 1 and r->'list'->0 ? 'lines_reserve' from public.tiktok_payouts((select v::uuid from ids where k='A'), null, null) r), 'owner can load TikTok payouts with TikTok''s totals and each payout''s order lines');
 select t.ok((select (r->>'order_count')::int = 1 and r->'lines' @> '[{"path":"","key":"revenue_amount","total":20}]' from public.tiktok_report((select v::uuid from ids where k='A'), null, null) r), 'the TikTok report adds up the order lines');
+select t.ok((select (r->0->>'sales')::numeric = 20 from public.tiktok_daily_sales((select v::uuid from ids where k='A'), null, null) r), 'the TikTok goal tracker gets net sales per day');
 reset role; update public.tiktok_transactions set data = data where id = 'T1'; set role authenticated;
 select public.tiktok_prepare((select v::uuid from ids where k='A'));
 select t.ok(t.revenue() = 20, 'TikTok sending a line again unchanged keeps the totals');
@@ -286,10 +287,12 @@ select t.fails($$select * from public.tiktok_cron$$, 'people cannot read the hou
 select t.fails($$select public.tiktok_sync_begin((select v::uuid from ids where k='A'))$$, 'people cannot take or release the TikTok sync directly');
 select t.as_user('00000000-0000-0000-0000-0000000000a2', 'viewer@a.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load the TikTok report');
+select t.fails($$select public.tiktok_daily_sales((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load TikTok daily sales');
 select t.fails($$select public.tiktok_payouts((select v::uuid from ids where k='A'), null, null)$$, 'viewers cannot load TikTok payouts');
 select t.ok(t.count('select * from public.tiktok_hourly') = 0, 'viewers cannot read TikTok totals');
 select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
 select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load the TikTok report for A');
+select t.fails($$select public.tiktok_daily_sales((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load TikTok daily sales for A');
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 
 -- Signed out.

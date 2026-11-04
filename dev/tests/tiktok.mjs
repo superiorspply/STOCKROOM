@@ -46,6 +46,20 @@ try {
   check(stc.includes('Total settlement') && stc.includes('$46.20') && stc.includes('Revenue') && stc.includes('$100.00') && /Payable amount\$41\.20/.test(stc), 'TikTok\'s own statement totals are shown, with reserve and the payable amount (' + stc + ')');
   const chk = await card('Checked against TikTok');
   check(chk.includes('1 of 2 payouts match their order lines to the cent') && chk.includes('no order lines') && !chk.includes('differ'), 'each payout is checked against its order lines (' + chk + ')');
+  // Sales goal: a goal around today; the stand-in shop's $100 of net sales counts toward it.
+  await P.evaluate(async () => {
+    const db = await window.claude.use('db'), d = n => { const t = new Date(Date.now() + n * 864e5); return t.toISOString().slice(0, 10); };
+    await db.doc('settings/tiktok_goal').set({title:'Test goal', amount:1000, start:d(-10), end:d(19)});
+  });
+  await P.getByRole('button', {name:'30 days', exact:true}).click();
+  await P.locator('.goalcard .goalbar').first().waitFor({timeout:10000});
+  check((await P.locator('.goalcard').first().textContent()).includes('Test goal'), 'the overview shows the sales goal');
+  await tab('Goal');
+  await P.locator('.goalstats').waitFor({timeout:10000});
+  const goal = await P.locator('.goalcard').textContent();
+  check(goal.includes('$100.00 of $1,000.00') && goal.includes('10%') && /\$900\.00left to go/.test(goal) && goal.includes('days left') && goal.includes('needed per day'), 'the Goal tab shows progress, what is left and what is needed per day (' + goal.slice(0, 160) + ')');
+  check(await P.locator('.goalcard .goalbar i').evaluate(e => Math.abs(parseFloat(e.style.width) - 10) < 0.01), 'the bar is filled to 10%');
+  check(await P.locator('.goalchart svg').count() === 1, 'the Goal tab charts sales against the goal');
   await tab('TikTok fees');
   check((await card('TikTok fees')).includes('-$10.80') && (await card('TikTok fees')).includes('TikTok commission') && (await card('TikTok fees')).includes('Payment processing fee') && (await card('TikTok fees')).includes('Shipped by TikTok fee'), 'the TikTok fees tab shows each fee with a subtotal');
   await tab('Creator commissions');

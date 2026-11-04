@@ -308,6 +308,13 @@ const runtime = {
         return data || 0;
       },
       // Totals for the report, worked out in the database: every amount field summed, paid per day, newest orders.
+      // Net sales per UTC day in [from, to), for the sales goal.
+      async dailySales(from, to){
+        const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
+        const {data, error} = await sb.rpc('tiktok_daily_sales', {cid:S.company.id, t_from:iso(from), t_to:iso(to)});
+        if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'The sales goal needs a database update. Run the latest TikTok migration in Supabase.' : error.message);
+        return data || [];
+      },
       async report(from, to, tz){
         const iso = t => t > 0 && isFinite(t) ? new Date(t).toISOString() : null;
         const {data, error} = await sb.rpc('tiktok_report', {cid:S.company.id, t_from:iso(from), t_to:iso(to), tz:tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'});

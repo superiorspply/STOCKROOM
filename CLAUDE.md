@@ -39,6 +39,9 @@ A multi-company inventory, orders and sales web app, live at https://stockroomin
   - Only one order's lines are fetched when it is opened.
   - The dev server has a stand-in TikTok at `/mock-tiktok`. The test is `dev/tests/tiktok.mjs`.
 - Sales tab and Reports use shared date ranges (`rangeChips`, `openRangePicker`, `rangeBounds`); Reports has a Shipping view built from each invoice's `shipping`. Invoices are groups of `sales` sharing `invoiceNo`, with extra fields in `invoices/<key>`. `openInvoiceEdit` changes those sales and adjusts stock.
+- Invoice dates: the cart's "Invoice date" and the invoice sheet's date set the sales' `at` (`atForDay`, `setInvoiceDate`), so a sale entered later counts on the day it happened in every report.
+- Previous balance: an invoice with `carry: true` in `invoices/<key>` shows the customer's earlier unpaid invoices (`priorOpen`) and the total owed, on screen and in the PDF/web page. Each invoice keeps its own sales and payments, so nothing is counted twice; a payment taken through it pays the oldest balance first (`openPayment`). The cart offers it per invoice; `settings/invoicing.carryBalance` makes it the default. Test: `dev/tests/invoicing.mjs`.
+- The home screen's "Pick dates…" chip uses the same calendar as Reports (`state.hrange`).
 - The cart is saved in `localStorage` per company (`stockroom_cart_<company id>`), so a refresh keeps it. `watchForUpdate` compares the page's `js/backend.js?v=<commit>` stamp with the live one and shows a Refresh bar when a newer version is published.
 - `.github/workflows/site.yml`: runs the tests, then publishes `index.html`, `config.js`, `manifest.webmanifest`, `js/` and `icons/` to Pages on every push to `main`.
 

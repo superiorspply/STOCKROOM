@@ -212,6 +212,8 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .paybox{border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;background:var(--surface2)}
 .paystat{display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:6px}
 .payline{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+.carrybox{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:-4px 0 12px}
+.payline.linkrow{width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.payline.owed{font-size:16px;border-bottom:0}
 .payrow{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}.paym{font-weight:600;font-size:14px}
 .payrow input{width:100%;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#0b0b0d;color:var(--ink);font-size:16px}
 .payrow .btn{padding:10px 12px;border-radius:12px}
@@ -475,7 +477,7 @@ function pdfLogo(doc,x,y,w){ try { doc.addImage(LOGO,'JPEG',x,y,w,w); return tru
 const state = {
   items:[], customers:[], sales:[], invoices:[], business:'',
   loaded:{items:false,customers:false,sales:false,invoices:false},
-  tab:'home', hperiod:'30', hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rrange:{key:'30'}, rview:'sales', ttview:'overview', srange:{key:'30'}, sview:'orders', sq:'', slimit:0, cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
+  tab:'home', hperiod:'30', hrange:{key:'custom'}, hmetric:'revenue', q:'', cq:'', filter:'all', openCustomer:null, ctype:'all', csort:'name', cbracket:'all', oq:'', ofilter:'all', isAdmin:true, deadDays:60, stype:'all', ssize:'all', plQty:true, hideCost:(()=>{ try { return localStorage.getItem('ss_hidecost')==='1'; } catch(e){ return false; } })(), askTurns:[], sample:null, stockx:null, rrange:{key:'30'}, rview:'sales', ttview:'overview', srange:{key:'30'}, sview:'orders', sq:'', slimit:0, cat:'all', settings:{medium:500,large:2500}, settingsSaved:false, orderQty:{medium:1000,large:5000},
   db:null, dl:null, assets:null, status:'connecting', canWrite:true
 };
 let host = null; // list host for current tab
@@ -546,6 +548,7 @@ function subscribe(){
   }, ()=>{});
   state.db.doc('settings/timeclock').onSnapshot(d=>{ state.clock = d.exists ? (d.data()||{}) : {}; }, ()=>{});
   state.db.doc('settings/business').onSnapshot(d=>{ state.business = d.exists ? String((d.data()||{}).text||'') : ''; }, ()=>{});
+  state.db.doc('settings/invoicing').onSnapshot(d=>{ state.carryDefault = d.exists && !!(d.data()||{}).carryBalance; }, ()=>{});
   for (const name of ['items','customers','sales','invoices']){
     state.db.collection(name).onSnapshot(snap=>{
       state[name] = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
@@ -1031,9 +1034,9 @@ td{padding:13px 14px;font-size:14px;vertical-align:top}tbody tr:nth-child(odd) t
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Invoice ${esc(d.no)}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&display=swap"><style>${css}</style></head><body><div class="pg">
 <div class="bar"><button onclick="window.print()">Print</button></div>
 <div class="hd"><div class="red"></div><div class="brand"><img src="${LOGO}" alt="" style="width:62px;height:62px;border-radius:14px;display:block;margin-bottom:14px"><h1>${esc(BRAND())}</h1><div class="x">x Stockroom</div><div class="biz">${biz}</div></div><div class="meta"><div class="t">Invoice</div><div class="no">${esc(d.no)}</div><div class="dt">${esc(longDate(d.date))}</div></div></div>
-<div class="info"><div><div class="lbl">Billed to</div><div class="who">${esc(d.name)}</div><div class="det">${bill}</div></div><div class="due"><span class="pill">${STATUS_LABEL[d.status]}</span><div class="amt">${esc(money(d.paid ? d.total : d.balance))}</div><div class="lbl" style="margin:6px 0 0">${d.paid?'Total paid':'Balance due'}</div></div></div>
+<div class="info"><div><div class="lbl">Billed to</div><div class="who">${esc(d.name)}</div><div class="det">${bill}</div></div><div class="due"><span class="pill">${STATUS_LABEL[d.status]}</span><div class="amt">${esc(money((d.prev||[]).length ? d.owed : d.paid ? d.total : d.balance))}</div><div class="lbl" style="margin:6px 0 0">${(d.prev||[]).length ? 'Total owed' : d.paid?'Total paid':'Balance due'}</div></div></div>
 <div class="tb"><table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price each</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
-<div class="bot"><div class="note">${d.note ? '<b>Notes</b>'+esc(d.note) : ''}</div><div class="tot"><div class="l"><span>Subtotal</span><span>${esc(money(d.subtotal))}</span></div>${d.shipping>0 ? '<div class="l"><span>Shipping</span><span>'+esc(money(d.shipping))+'</span></div>' : ''}<div class="g"><span>Total</span><b>${esc(money(d.total))}</b></div>${(d.payments||[]).map(p=>'<div class="l"><span>Paid · '+esc(p.method)+' · '+esc(fmtDate(p.at))+'</span><span>-'+esc(money(p.amount))+'</span></div>').join('')}${(d.payments||[]).length ? '<div class="l" style="font-weight:700"><span>'+(d.paid ? 'Paid in full' : 'Balance due')+'</span><span>'+esc(money(d.balance))+'</span></div>' : ''}</div></div>
+<div class="bot"><div class="note">${d.note ? '<b>Notes</b>'+esc(d.note) : ''}</div><div class="tot"><div class="l"><span>Subtotal</span><span>${esc(money(d.subtotal))}</span></div>${d.shipping>0 ? '<div class="l"><span>Shipping</span><span>'+esc(money(d.shipping))+'</span></div>' : ''}<div class="g"><span>Total</span><b>${esc(money(d.total))}</b></div>${(d.payments||[]).map(p=>'<div class="l"><span>Paid · '+esc(p.method)+' · '+esc(fmtDate(p.at))+'</span><span>-'+esc(money(p.amount))+'</span></div>').join('')}${(d.payments||[]).length ? '<div class="l" style="font-weight:700"><span>'+(d.paid ? 'Paid in full' : 'Balance due')+'</span><span>'+esc(money(d.balance))+'</span></div>' : ''}${(d.prev||[]).length ? d.prev.map(v=>'<div class="l"><span>Previous balance · '+esc(v.no)+' · '+esc(fmtDate(v.at))+'</span><span>'+esc(money(v.balance))+'</span></div>').join('')+'<div class="l" style="font-weight:700;font-size:16px;padding-bottom:14px"><span>Total owed</span><span>'+esc(money(d.owed))+'</span></div>' : ''}</div></div>
 <div class="ft"><span>Thank you for your business.</span><span>${esc(d.no)}</span></div></div></body></html>`;
 }
 
@@ -1065,8 +1068,9 @@ function makeInvoicePdf(d){
   bill.forEach((t,n)=>doc.text(t, M, y+37+n*13));
   const pillW = 76; fill(d.status==='paid' ? [23,114,74] : d.status==='partial' ? [180,95,6] : RED); doc.roundedRect(W-M-pillW, y-12, pillW, 24, 12, 12, 'F');
   ink(WHITE); font('bold',10); doc.text(STATUS_LABEL[d.status], W-M-pillW/2, y+4, {align:'center'});
-  ink(INK); font('bold',28); doc.text(ascii(money(d.paid ? d.total : d.balance)), W-M, y+46, {align:'right'});
-  ink(MUTE); font('normal',9); doc.text(d.paid ? 'Total paid' : 'Balance due', W-M, y+62, {align:'right'});
+  const hasPrev = (d.prev||[]).length > 0;
+  ink(INK); font('bold',28); doc.text(ascii(money(hasPrev ? d.owed : d.paid ? d.total : d.balance)), W-M, y+46, {align:'right'});
+  ink(MUTE); font('normal',9); doc.text(hasPrev ? 'Total owed' : d.paid ? 'Total paid' : 'Balance due', W-M, y+62, {align:'right'});
   y = Math.max(y + 37 + bill.length*13, y + 62) + 30;
 
   const C = {qty:392, price:482, total:W-M-12};
@@ -1097,7 +1101,8 @@ function makeInvoicePdf(d){
   });
 
   // totals + notes
-  const bx = 330, bw = W-M-bx; const pays = d.payments||[]; const need = (d.shipping>0 ? 108 : 90) + (pays.length ? pays.length*18+30 : 0);
+  const bx = 330, bw = W-M-bx; const pays = d.payments||[]; const prev = d.prev||[];
+  const need = (d.shipping>0 ? 108 : 90) + (pays.length ? pays.length*18+30 : 0) + (prev.length ? prev.length*18+34 : 0);
   if (y + 24 + need > H - 50) pageTop(); else y += 24;
   const top = y;
   fill(ZEB); doc.roundedRect(bx, y, bw, need-4, 10, 10, 'F');
@@ -1110,6 +1115,11 @@ function makeInvoicePdf(d){
     let py = y+40+20; ink(BODY); font('normal',9.5);
     pays.forEach(pm=>{ doc.text(ascii('Paid via '+pm.method), bx+16, py); doc.text(ascii('-'+money(pm.amount)), bx+bw-16, py, {align:'right'}); py += 18; });
     ink(INK); font('bold',11); doc.text(d.paid ? 'Paid in full' : 'Balance due', bx+16, py+4); doc.text(ascii(money(d.balance)), bx+bw-16, py+4, {align:'right'});
+  }
+  if (prev.length){
+    let py = y+40+20+(pays.length ? pays.length*18+30 : 0); ink(BODY); font('normal',9.5);
+    prev.forEach(v=>{ doc.text(ascii('Previous balance '+v.no+' '+fmtDate(v.at)), bx+16, py); doc.text(ascii(money(v.balance)), bx+bw-16, py, {align:'right'}); py += 18; });
+    ink(INK); font('bold',12); doc.text('Total owed', bx+16, py+6); doc.text(ascii(money(d.owed)), bx+bw-16, py+6, {align:'right'});
   }
   if (d.note){
     ink(INK); font('bold',10); doc.text('Notes', M, top+16);
@@ -1135,6 +1145,12 @@ function openInvoice(key){
   const addrs = cust ? addrList(cust) : [];
   const ship = h('input',{type:'number',min:'0',step:'any',inputmode:'decimal',value:meta.shipping ? String(meta.shipping) : '',placeholder:'0.00'});
   const noteIn = h('input',{type:'text',value:meta.note||'',placeholder:'Optional note shown on the invoice',autocomplete:'off'});
+  const dateIn = h('input',{type:'date',value:localDay(first.at),max:localDay(nowIso()),disabled:!state.canWrite});
+  dateIn.addEventListener('change', async ()=>{
+    if (!dateIn.value || dateIn.value===localDay(first.at)) return;
+    const ok = await setInvoiceDate(key, dateIn.value);
+    if (ok){ toast(invNumber(key)+' now dated '+longDate(moveToDay(first.at, dateIn.value))); setTimeout(()=>openInvoice(key), 300); } else dateIn.value = localDay(first.at);
+  });
   const addrSel = h('select',{}, addrs.map((a,n)=>h('option',{value:String(n)}, (a.label ? a.label+': ' : '')+a.text.replace(/\s*\n\s*/g,', '))));
   if (addrs.length) addrSel.value = String(Math.min(int(meta.addrIdx), addrs.length-1));
   const sub = round2(lines.reduce((a,x)=>a+(x.total||0),0));
@@ -1142,18 +1158,31 @@ function openInvoice(key){
   const heroTotal = h('b',{class:'ihb'}); const heroState = h('span',{class:'ihs'});
   const collect = ()=>{
     const sh = round2(num(ship.value)); const a = addrs[int(addrSel.value)] || null; const info = payInfo(key, round2(sub+sh));
-    return {key, no:invNumber(key), date:first.at, name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), paid:info.paid, status:info.status, paidAmt:info.paidAmt, balance:info.balance, payments:paymentsOf(key), note:noteIn.value.trim(), track:trackText(invMeta(key))};
+    const prev = prevOf(key);
+    return {key, no:invNumber(key), date:first.at, name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), paid:info.paid, status:info.status, paidAmt:info.paidAmt, balance:info.balance, payments:paymentsOf(key), note:noteIn.value.trim(), track:trackText(invMeta(key)),
+      prev, owed:round2(info.balance+prev.reduce((x,v)=>x+v.balance,0))};
   };
   const payBox = h('div',{class:'paybox'});
+  // Previous balance on this invoice: offered when the customer has earlier invoices still owing.
+  const earlier = priorOpen(key);
+  const carryChk = h('input',{type:'checkbox',checked:!!meta.carry,disabled:!state.canWrite});
+  carryChk.addEventListener('change', async ()=>{ const ok = await write(()=>saveInvoiceMeta(key,{carry:carryChk.checked})); if (ok) openInvoice(key); else carryChk.checked = !carryChk.checked; });
+  const carryBox = earlier.length && (state.canWrite || meta.carry) ? h('label',{class:'chk',style:'margin-top:10px'}, carryChk,
+    h('span',{}, 'Add their unpaid balance from earlier invoices ('+money(round2(earlier.reduce((x,v)=>x+v.balance,0)))+')')) : null;
   const drawPay = d=>{
     payBox.replaceChildren(...[
       h('div',{class:'hh',style:'margin:0 0 6px'},'Payments'),
       h('div',{class:'paystat'}, statusBadge(d.status), h('span',{}, d.paid ? 'Paid in full' : money(d.paidAmt)+' paid · '+money(d.balance)+' due')),
       ...d.payments.map(p=>h('div',{class:'payline'}, h('span',{}, p.method+' · '+fmtDate(p.at)+(p.note ? ' · '+p.note : '')), h('b',{}, money(p.amount)))),
       (!d.payments.length && d.paid) ? h('p',{class:'hint',style:'margin:4px 0 0'},'Marked paid before payment methods were tracked.') : null,
-      h('button',{class:'btn'+(d.paid ? '' : ' primary'),type:'button',style:'margin-top:10px',onclick:()=>openPayment(key, ()=>openInvoice(key))}, d.paid ? 'Edit payments' : 'Record payment')].filter(Boolean));
+      ...(d.prev.length ? [h('div',{class:'hh',style:'margin:10px 0 4px'},'Previous balance'),
+        ...d.prev.map(v=>h('button',{class:'payline linkrow',type:'button',onclick:()=>openInvoice(v.key)}, h('span',{}, v.no+' · '+fmtDate(v.at)), h('b',{}, money(v.balance)))),
+        h('div',{class:'payline owed'}, h('span',{},'Total owed'), h('b',{}, money(d.owed)))] : []),
+      carryBox,
+      h('button',{class:'btn'+(d.owed>0.004 ? ' primary' : ''),type:'button',style:'margin-top:10px',onclick:()=>openPayment(key, ()=>openInvoice(key))}, d.owed>0.004 ? 'Record payment' : 'Edit payments')].filter(Boolean));
   };
-  const upd = ()=>{ const d = collect(); totalEl.textContent = 'Total: '+money(d.total); heroTotal.textContent = money(d.total); heroState.textContent = STATUS_LABEL[d.status]; drawPay(d); };
+  const upd = ()=>{ const d = collect(); totalEl.textContent = 'Total: '+money(d.total);
+    heroTotal.textContent = money(d.prev.length ? d.owed : d.total); heroState.textContent = d.prev.length ? 'Total owed' : STATUS_LABEL[d.status]; drawPay(d); };
   ship.addEventListener('input', upd); upd();
   async function persist(d){
     if (!state.db || !state.canWrite) return;
@@ -1189,6 +1218,7 @@ function openInvoice(key){
     lines.map(s=>h('div',{class:'hrow'}, h('div',{class:'hmain'}, h('div',{}, fmtN(s.qty)+' × '+lineName(s)), h('div',{class:'meta',style:'margin-top:2px'}, skuText(s) ? h('span',{class:'sku'}, skuText(s)) : null, h('span',{}, money(s.unitPrice)+' each'))), h('b',{}, money(s.total)))),
     h('div',{style:'height:12px'}),
     h('div',{class:'grid2'}, field('Shipping ($)', ship), field('Note on invoice', noteIn)),
+    field('Invoice date', dateIn, 'Sales and profit count on this day. Changing it moves every line of this invoice.'),
     payBox,
     h('details',{class:'sizes'}, h('summary',{},'Your business details on invoices'), h('div',{style:'margin-top:8px'}, field('Shown at the top of every invoice', bizIn), bizBtn)),
     h('div',{class:'stickyfoot'}, h('div',{class:'foot',style:'flex-direction:column'}, pdfBtn, state.canWrite ? h('button',{class:'btn',type:'button',onclick:()=>openInvoiceEdit(key)},'Edit items') : null, htmlBtn, shipBtn, packBtn, saveBtn))), {noFocus:true});
@@ -1275,7 +1305,7 @@ function openInvoiceEdit(key){
         const q = int(r.qty), p = round4(num(r.price));
         if (q!==r.s.qty || p!==r.s.unitPrice) await state.db.doc('sales/'+r.s.id).update({qty:q, unitPrice:p, total:round2(q*p)});
       }
-      const at = nowIso(), base = {customerId:first.customerId||'', customerName:first.customerName||'', invoiceNo:first.invoiceNo||key, note:'', at};
+      const at = first.at || nowIso(), base = {customerId:first.customerId||'', customerName:first.customerName||'', invoiceNo:first.invoiceNo||key, note:'', at};
       for (const l of adds){
         const q = int(l.qty), p = round4(num(l.price));
         if (l.custom){ await state.db.collection('sales').doc().set(Object.assign({itemId:'', sku:'CUSTOM', name:l.name.trim(), qty:q, size:'', sizeType:'', unitPrice:p, unitCost:round4(num(l.cost)), total:round2(q*p), custom:true}, base)); continue; }
@@ -1320,6 +1350,18 @@ function payInfo(key, total){
 }
 function invTotalOf(key){ const m = invMeta(key); return round2(invoiceSales(key).reduce((a,s)=>a+(s.total||0),0)+num(m.shipping)); }
 function isPaid(key){ return payInfo(key, invTotalOf(key)).paid; }
+// Previous balance: a customer's earlier invoices that are not fully paid, oldest first. An invoice with
+// "carry" set shows them and the total owed (its own balance plus theirs). Each invoice keeps its own sales
+// and payments, so reports count every sale once; a payment taken through the newer invoice pays the
+// oldest balance first.
+function openBefore(customerId, at, key){
+  if (!customerId) return [];
+  return allInvoices().filter(v=>v.key!==key && v.customerId===customerId && v.balance>0.004 && (!at || String(v.first.at)<String(at) || (String(v.first.at)===String(at) && v.key<key)))
+    .sort((a,b)=>String(a.first.at).localeCompare(String(b.first.at)));
+}
+function priorOpen(key){ const f = invoiceSales(key)[0]; return f ? openBefore(f.customerId, f.at, key) : []; }
+const carryOf = key => invMeta(key).carry ? priorOpen(key) : [];
+const prevOf = key => carryOf(key).map(v=>({key:v.key, no:v.no, at:v.first.at, balance:v.balance}));
 const statusBadge = (st, extra) => h('span',{class:'badge '+(st==='paid'?'b-in':st==='partial'?'b-q':'b-bad')}, STATUS_LABEL[st]+(extra||''));
 function shipOf(key){ const m = invMeta(key); return m.shipStatus || (key.startsWith('S-') ? 'shipped' : 'to_pack'); }
 function trackText(m){ return (m && m.shipStatus==='shipped' && m.tracking) ? ((m.carrier ? m.carrier+' ' : '')+m.tracking) : ''; }
@@ -1329,6 +1371,18 @@ function trackUrl(carrier, n){
     : carrier==='UPS' ? 'https://www.ups.com/track?tracknum='+t
     : carrier==='FedEx' ? 'https://www.fedex.com/fedextrack/?trknbr='+t
     : carrier==='DHL' ? 'https://www.dhl.com/en/express/tracking.html?AWB='+t : '';
+}
+// Invoice dates. A sale entered on Monday for Saturday counts on Saturday in every report: its sales' "at" is
+// that day. Today stays "now"; another day keeps the current time of day, so lines stay in order.
+function atForDay(day){
+  if (!day || day===localDay(nowIso())) return nowIso();
+  const [y,m,d] = day.split('-').map(Number), n = new Date();
+  return new Date(y, m-1, d, n.getHours(), n.getMinutes(), n.getSeconds()).toISOString();
+}
+const moveToDay = (iso, day) => { const t = new Date(iso), [y,m,d] = day.split('-').map(Number); return new Date(y, m-1, d, t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds()).toISOString(); };
+async function setInvoiceDate(key, day){
+  const lines = invoiceSales(key);
+  return write(async()=>{ for (const s of lines) await state.db.doc('sales/'+s.id).update({at:moveToDay(s.at, day)}); });
 }
 async function saveInvoiceMeta(key, patch){
   const cur = Object.assign({}, invMeta(key)); delete cur.id;
@@ -1340,7 +1394,9 @@ function baseInvoice(key){
   const m = invMeta(key); const addrs = cust ? addrList(cust) : [];
   const a = addrs[Math.min(int(m.addrIdx), Math.max(0, addrs.length-1))] || null;
   const sub = round2(lines.reduce((x,s)=>x+(s.total||0),0)); const sh = round2(num(m.shipping));
-  return {key, no:invNumber(key), date:first.at||'', name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), ...payInfo(key, round2(sub+sh)), payments:paymentsOf(key), note:m.note||'', track:trackText(m)};
+  const info = payInfo(key, round2(sub+sh)), prev = prevOf(key);
+  return {key, no:invNumber(key), date:first.at||'', name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), ...info, payments:paymentsOf(key), note:m.note||'', track:trackText(m),
+    prev, owed:round2(info.balance+prev.reduce((x,v)=>x+v.balance,0))};
 }
 function allInvoices(){
   const map = new Map();
@@ -1380,43 +1436,57 @@ function openShip(key, preset){
 
 function openPayment(key, onDone){
   const inv = baseInvoice(key); const total = inv.total; const info = payInfo(key, total);
+  const prev = carryOf(key), due = inv.owed;   // with a previous balance, what they owe in all
   const inputs = {}; const err = h('p',{class:'err'});
   const entered = ()=>PAY_METHODS.reduce((a,m)=>a+Math.max(0,round2(num(inputs[m].value))),0);
   const sumEl = h('p',{class:'paysum'});
   const save = h('button',{class:'btn primary',type:'submit'},'Save payment');
   const upd = ()=>{
-    const e = round2(entered()); const rem = round2(info.balance-e);
+    const e = round2(entered()); const rem = round2(due-e);
     sumEl.textContent = e>0 ? (rem>0.004 ? money(e)+' entered · '+money(rem)+' will still be due' : rem<-0.004 ? 'That is '+money(-rem)+' more than the balance' : money(e)+' entered · paid in full') : 'Enter an amount next to each way they paid.';
     sumEl.className = 'paysum'+(rem<-0.004 ? ' over' : '');
     save.disabled = !(e>0);
   };
   const rows = PAY_METHODS.map(m=>{
     const inp = h('input',{type:'number',min:'0',step:'any',inputmode:'decimal',placeholder:'0.00','aria-label':m+' amount'}); inputs[m] = inp; inp.addEventListener('input', upd);
-    const rest = h('button',{class:'btn',type:'button',onclick:()=>{ const others = PAY_METHODS.filter(x=>x!==m).reduce((a,x)=>a+Math.max(0,round2(num(inputs[x].value))),0); const r = round2(info.balance-others); inp.value = r>0 ? String(r) : ''; upd(); }},'Rest');
+    const rest = h('button',{class:'btn',type:'button',onclick:()=>{ const others = PAY_METHODS.filter(x=>x!==m).reduce((a,x)=>a+Math.max(0,round2(num(inputs[x].value))),0); const r = round2(due-others); inp.value = r>0 ? String(r) : ''; upd(); }},'Rest');
     return h('div',{class:'payrow'}, h('span',{class:'paym'}, m), inp, rest);
   });
   const note = h('input',{type:'text',placeholder:'Reference or note (optional)',autocomplete:'off'});
   const prior = paymentsOf(key);
   const form = h('form',{novalidate:true},
     h('p',{style:'margin:0 0 10px'}, h('span',{class:'sku'}, inv.no), ' ', inv.name),
-    h('div',{class:'sum psum'}, stat(money(total),'invoice total'), stat(money(info.paidAmt),'paid so far'), stat(money(info.balance),'balance due')),
+    prev.length ? h('div',{class:'sum psum'}, stat(money(info.balance),'this invoice'), stat(money(round2(due-info.balance)),'previous balance'), stat(money(due),'total owed'))
+      : h('div',{class:'sum psum'}, stat(money(total),'invoice total'), stat(money(info.paidAmt),'paid so far'), stat(money(info.balance),'balance due')),
+    prev.length ? h('p',{class:'hint',style:'margin:0 0 10px'}, 'A payment goes to the oldest balance first: '+prev.map(v=>v.no).concat(inv.no).join(', then ')+'.') : null,
     prior.length ? h('div',{style:'margin-bottom:12px'}, h('div',{class:'hh',style:'margin:0 0 4px'},'Payments so far'),
       prior.map((p,i)=>h('div',{class:'payline'}, h('span',{}, p.method+' · '+fmtDate(p.at)+(p.note ? ' · '+p.note : '')), h('span',{}, h('b',{}, money(p.amount)), state.isAdmin ? h('button',{class:'linkdanger',type:'button',style:'padding:0 0 0 10px',onclick:()=>confirmSheet('Remove payment','Remove the '+money(p.amount)+' '+p.method+' payment?','Remove',()=>write(()=>saveInvoiceMeta(key,{payments:paymentsOf(key).filter(x=>x!==p && !(x.at===p.at && x.method===p.method && num(x.amount)===num(p.amount)))})).then(ok=>{ if (ok && onDone) setTimeout(onDone,200); return ok; }))},'Remove') : null)))) : null,
-    info.paid ? h('p',{class:'hint'},'This invoice is paid in full.') : h('div',{class:'hh',style:'margin:0 0 6px'},'How did they pay?'),
-    info.paid ? null : rows, info.paid ? null : field('Note', note), info.paid ? null : sumEl, err,
-    h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:()=>{ closeSheet(); if (onDone) setTimeout(onDone,150); }}, info.paid ? 'Close' : 'Cancel'), info.paid ? null : save));
+    !(due>0.004) ? h('p',{class:'hint'},'This invoice is paid in full.') : h('div',{class:'hh',style:'margin:0 0 6px'},'How did they pay?'),
+    !(due>0.004) ? null : rows, !(due>0.004) ? null : field('Note', note), !(due>0.004) ? null : sumEl, err,
+    h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:()=>{ closeSheet(); if (onDone) setTimeout(onDone,150); }}, !(due>0.004) ? 'Close' : 'Cancel'), !(due>0.004) ? null : save));
   upd();
   form.addEventListener('submit', async e=>{
     e.preventDefault(); err.textContent = '';
     const tot = round2(entered());
     if (!(tot>0)){ err.textContent = 'Enter an amount.'; return; }
-    if (tot > info.balance+0.005){ err.textContent = 'That is more than the '+money(info.balance)+' balance due. Lower an amount.'; return; }
+    if (tot > due+0.005){ err.textContent = 'That is more than the '+money(due)+' owed. Lower an amount.'; return; }
     save.disabled = true;
-    const now = nowIso(); const list = paymentsOf(key).slice();
-    PAY_METHODS.forEach(m=>{ const a = round2(num(inputs[m].value)); if (a>0) list.push({method:m, amount:a, at:now, note:note.value.trim()}); });
-    const done = round2(info.paidAmt+tot) >= total-0.005;
-    const ok = await write(()=>saveInvoiceMeta(key,{payments:list, paid:done, paidAt:done ? now : null}));
-    if (ok){ closeSheet(); toast(done ? 'Paid in full' : money(tot)+' recorded · '+money(round2(total-info.paidAmt-tot))+' still due'); if (onDone) setTimeout(onDone,250); } else save.disabled = false;
+    // Oldest balance first: the earlier invoices, then this one. Each gets its share of each method.
+    const now = nowIso(), nt = note.value.trim();
+    const left = PAY_METHODS.map(m=>({m, a:round2(num(inputs[m].value))})).filter(x=>x.a>0);
+    const plan = prev.map(v=>({key:v.key, bal:v.balance, total:v.total, paidAmt:v.paidAmt})).concat([{key, bal:info.balance, total, paidAmt:info.paidAmt}]);
+    const writes = [];
+    for (const t of plan){
+      let need = t.bal; const add = [];
+      for (const x of left){ if (need<=0.004) break; if (x.a<=0.004) continue; const p = round2(Math.min(need, x.a)); x.a = round2(x.a-p); need = round2(need-p);
+        add.push({method:x.m, amount:p, at:now, note:t.key===key ? nt : [nt, 'Paid with '+inv.no].filter(Boolean).join(' · ')}); }
+      if (!add.length) continue;
+      const got = round2(add.reduce((a,p)=>a+p.amount,0)), done = round2(t.paidAmt+got) >= t.total-0.005;
+      writes.push([t.key, {payments:paymentsOf(t.key).concat(add), paid:done, paidAt:done ? now : null}]);
+    }
+    const ok = await write(async()=>{ for (const [k,patch] of writes) await saveInvoiceMeta(k, patch); });
+    const still = round2(due-tot);
+    if (ok){ closeSheet(); toast(still<=0.004 ? 'Paid in full' : money(tot)+' recorded · '+money(still)+' still due'); if (onDone) setTimeout(onDone,250); } else save.disabled = false;
   });
   openSheet('Record payment', form, {noFocus:true});
 }
@@ -2220,6 +2290,7 @@ const compact = (m,v) => { const p = (m==='revenue' || m==='profit') ? '$' : '';
 function goTab(tab, patch){ Object.assign(state, patch||{}); state.tab = tab; renderTab(); window.scrollTo(0,0); }
 function dayStart(d){ const x = new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
 function homeRange(){
+  if (state.hperiod==='custom' && state.hrange.from!=null) return {start:state.hrange.from, end:addDays(state.hrange.to, 1)};
   const end = dayStart(Date.now()) + DAY;
   if (state.hperiod==='all'){
     let first = Date.now(); for (const s of state.sales){ const t = new Date(s.at).getTime(); if (t<first) first = t; }
@@ -2285,20 +2356,20 @@ function renderHome(){
   const m = state.hmetric; const {start, end} = homeRange();
   const inRange = state.sales.filter(s=>{ const t = new Date(s.at).getTime(); return t>=start && t<end; });
   const total = metricVal(inRange, m);
-  const span = Math.round((end-start)/DAY);
+  const span = Math.max(1, Math.round((end-start)/DAY));
   const prev = state.hperiod==='all' ? null : metricVal(state.sales.filter(s=>{ const t = new Date(s.at).getTime(); return t>=start-span*DAY && t<start; }), m);
   const ser = buildSeries(state.sales, start, end, m);
   const up = prev===null || total>=prev;
   const color = (m==='profit' && total<0) ? 'var(--bad)' : up ? 'var(--ok)' : 'var(--bad)';
   const colorHex = (m==='profit' && total<0) ? '#ff6b6b' : up ? '#3ddc97' : '#ff6b6b';
-  const periodName = state.hperiod==='all' ? 'All time' : state.hperiod==='1' ? 'Today' : 'Last '+state.hperiod+' days';
+  const periodName = state.hperiod==='custom' ? rangeLabel(state.hrange) : state.hperiod==='all' ? 'All time' : state.hperiod==='1' ? 'Today' : 'Last '+state.hperiod+' days';
   const mLabel = HMETRICS.find(x=>x[0]===m)[1];
   const big = h('div',{class:'hbig'}, metricFmt(m,total));
   const sub = h('div',{class:'hsub'}, mLabel+' · '+periodName);
   const delta = h('span',{class:'delta '+(up?'up':'down')});
   const setDelta = ()=>{ if (prev===null){ delta.hidden = true; return; } delta.hidden = false;
     const ch = prev>0 ? Math.round((total-prev)/prev*1000)/10 : null;
-    delta.textContent = (up?'▲ ':'▼ ')+(ch===null ? (total>0 ? 'New' : '0%') : Math.abs(ch)+'%')+(span===1 ? ' vs yesterday' : ' vs previous '+span+' days'); };
+    delta.textContent = (up?'▲ ':'▼ ')+(ch===null ? (total>0 ? 'New' : '0%') : Math.abs(ch)+'%')+(span===1 ? (state.hperiod==='custom' ? ' vs the day before' : ' vs yesterday') : ' vs previous '+span+' days'); };
   setDelta();
   const grid = h('div',{class:'homegrid'}); const L = h('div',{class:'hcol'}), R = h('div',{class:'hcol'}); grid.append(L,R); host.append(grid);
   let cur = grid; const sec = (col,n)=>{ cur = h('div',{style:'order:'+n}); col.append(cur); };
@@ -2312,7 +2383,9 @@ function renderHome(){
   sec(L,1);
   put.append(h('div',{class:'hero'},
     h('div',{class:'hhead'}, big, delta), sub, chart,
-    h('div',{class:'chips hchips'}, HPERIODS.map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.hperiod===k),onclick:()=>{ state.hperiod = k; renderList(); }}, l))),
+    h('div',{class:'chips hchips'}, HPERIODS.map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.hperiod===k),onclick:()=>{ state.hperiod = k; renderList(); }}, l)),
+      // Any dates: the same calendar as Reports and Sales.
+      h('button',{class:'chip',type:'button','aria-pressed':String(state.hperiod==='custom'),onclick:()=>openRangePicker(state.hrange, ()=>{ state.hperiod = 'custom'; renderList(); })}, state.hperiod==='custom' ? rangeLabel(state.hrange)+' ✎' : 'Pick dates…')),
     h('div',{class:'chips hchips',style:'margin-bottom:0'}, metrics.map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(m===k),onclick:()=>{ state.hmetric = k; renderList(); }}, l)))));
   sec(L,2);
   if (state.isAdmin && state.sample) put.append(askCard());
@@ -2765,7 +2838,7 @@ async function openShoeScan(){
 }
 
 /* ---------- cart (build an invoice from the inventory tab) ---------- */
-state.cart = {cid:'', lines:[], uid:0, ship:'', note:'', newName:'', newHandle:'', newType:''};
+state.cart = {cid:'', lines:[], uid:0, ship:'', note:'', newName:'', newHandle:'', newType:'', date:'', carry:null};
 let cartHost = null;
 const cartItem = ln => state.items.find(i=>i.id===ln.id);
 const cartPrice = ln => { if (ln.custom) return num(ln.priceVal); const it = cartItem(ln); if (!it) return 0; if (ln.touched) return num(ln.priceVal); return ln.level==='auto' ? priceFor(it, int(ln.qty)||1) : tierPrices(it)[ln.level]; };
@@ -2830,11 +2903,34 @@ function cartPanel(withTitle){
   const newHandle = h('input',{type:'text',placeholder:'@handle (optional)',autocomplete:'off',autocapitalize:'off',value:C.newHandle});
   const newType = typeSelect(); newType.value = C.newType;
   const newBox = h('div',{class:'newbox',hidden:sel.value!=='__new'}, field('Customer name', newName), field('Customer type', newType), field('Handle', newHandle));
-  sel.addEventListener('change', ()=>{ C.cid = sel.value; newBox.hidden = sel.value!=='__new'; if (!newBox.hidden) newName.focus(); });
+  // Previous balance: when the customer still owes on earlier invoices, offer to add it to this one.
+  // Owners and admins can make that the default for every new invoice (settings/invoicing).
+  const carryBox = h('div',{});
+  const carryOn = ()=>C.carry==null ? !!state.carryDefault : !!C.carry;
+  const drawCarry = ()=>{
+    const open = sel.value && sel.value!=='__new' ? openBefore(sel.value, null, '') : [];
+    if (!open.length){ carryBox.replaceChildren(); return; }
+    const bal = round2(open.reduce((a,v)=>a+v.balance,0));
+    const cb = h('input',{type:'checkbox',checked:carryOn()}); cb.addEventListener('change', ()=>{ C.carry = cb.checked; saveCart(); });
+    const def = state.isAdmin ? h('input',{type:'checkbox',checked:!!state.carryDefault}) : null;
+    if (def) def.addEventListener('change', async ()=>{
+      const ok = await write(()=>state.db.doc('settings/invoicing').set({carryBalance:def.checked, updatedAt:nowIso()}));
+      if (!ok){ def.checked = !def.checked; return; }
+      state.carryDefault = def.checked; if (C.carry==null) cb.checked = def.checked;
+      toast(def.checked ? 'Unpaid balances will be added to new invoices' : 'Unpaid balances will not be added unless you tick the box');
+    });
+    carryBox.replaceChildren(h('div',{class:'carrybox'},
+      h('label',{class:'chk',style:'margin:0'}, cb, h('span',{}, 'Add their unpaid balance of ', h('b',{}, money(bal)), ' ('+open.map(v=>v.no).join(', ')+') to this invoice')),
+      def ? h('label',{class:'chk hint',style:'margin:6px 0 0'}, def, h('span',{}, 'Always add a customer\'s unpaid balance to their new invoices')) : null));
+  };
+  sel.addEventListener('change', ()=>{ C.cid = sel.value; C.carry = null; newBox.hidden = sel.value!=='__new'; if (!newBox.hidden) newName.focus(); drawCarry(); });
+  drawCarry();
   newName.addEventListener('input', ()=>{ C.newName = newName.value; }); newHandle.addEventListener('input', ()=>{ C.newHandle = newHandle.value; }); newType.addEventListener('change', ()=>{ C.newType = newType.value; });
   const subEl = h('p',{class:'total'}); const err = h('p',{class:'err'});
   const ship = h('input',{type:'number',min:'0',step:'any',inputmode:'decimal',placeholder:'0.00',value:C.ship});
   const note = h('input',{type:'text',placeholder:'Optional note',autocomplete:'off',value:C.note});
+  const dateIn = h('input',{type:'date',value:C.date || localDay(nowIso()),max:localDay(nowIso())});
+  dateIn.addEventListener('change', ()=>{ C.date = dateIn.value===localDay(nowIso()) ? '' : dateIn.value; });
   const recalc = ()=>{
     C.lines.forEach(ln=>{ const r = refs.get(ln.uid); const p = cartPrice(ln); if (r){ if (!ln.touched) r.price.value = String(p); r.total.textContent = money(int(ln.qty)*p); } });
     const sh = num(ship.value), u = cartUnits();
@@ -2886,12 +2982,13 @@ function cartPanel(withTitle){
   const btn = h('button',{class:'btn primary',type:'submit',style:'width:100%'},'Create invoice');
   const form = h('form',{novalidate:true},
     withTitle ? h('div',{style:'display:flex;justify-content:space-between;align-items:center;margin:0 0 10px'}, h('h2',{style:'margin:0;font-size:20px'},'Cart'), C.lines.length ? h('button',{class:'linkdanger',type:'button',onclick:()=>{ C.lines = []; drawCart(); }},'Clear') : null) : null,
-    field('Customer', sel), newBox,
+    field('Customer', sel), newBox, carryBox,
     h('div',{style:'display:flex;justify-content:space-between;align-items:center'}, h('div',{class:'hh',style:'margin:0'},'Items'), h('button',{class:'btn',type:'button',style:'padding:6px 12px',onclick:addCustomLine},'+ Custom item')),
     C.lines.length > 1 ? h('div',{}, h('div',{class:'lbl'},'Set price level for all items'), h('div',{class:'chips lvchips'}, [['auto','Auto'],['small','Small'],['medium','Medium'],['large','Large']].map(([k,l])=>h('button',{class:'chip',type:'button',onclick:()=>{ C.lines.forEach(x=>{ x.level = k; x.touched = false; }); drawCart(); }}, l)))) : null,
     ...(lines.length ? lines : [h('p',{class:'empty',style:'padding:14px 0'},'Cart is empty. Tap Add to cart on any item.')]),
     lines.length ? h('button',{class:'btn addline',type:'button',onclick:addCustomLine},'+ Add custom item') : null,
     h('div',{class:'grid2',style:'margin-top:10px'}, field('Shipping ($)', ship), field('Note', note)),
+    field('Invoice date', dateIn, 'The day of the sale. Change it to count a sale on the day it happened, for example a weekend sale entered on Monday.'),
     subEl, err, btn);
   recalc();
   form.addEventListener('input', saveCart); form.addEventListener('change', saveCart);
@@ -2920,7 +3017,8 @@ function cartPanel(withTitle){
         await cref.set({name:customerName, type:newType.value, handle:newHandle.value.trim(), phone:'', email:'', addresses:[], address:'', notes:'', createdAt:nowIso()});
         customerId = cref.id;
       } else { const c = state.customers.find(x=>x.id===customerId); customerName = c ? c.name : ''; }
-      invNo = nextInvoiceNo(); const baseSpent = sel.value==='__new' ? 0 : spentBy(customerId); const at = nowIso();
+      invNo = nextInvoiceNo(); const baseSpent = sel.value==='__new' ? 0 : spentBy(customerId); const at = atForDay(C.date);
+      const carry = sel.value!=='__new' && carryOn() && openBefore(customerId, null, '').length > 0;
       const maps = new Map(), lefts = new Map();
       for (const ln of C.lines){
         if (ln.custom){ const q = int(ln.qty), p = round4(num(ln.priceVal)); await state.db.collection('sales').doc().set({itemId:'', sku:'CUSTOM', name:ln.name.trim(), qty:q, size:'', sizeType:'', unitPrice:p, unitCost:round4(num(ln.cost)), total:round2(q*p), customerId, customerName, invoiceNo:invNo, note:'', custom:true, at}); grand += round2(q*p); continue; }
@@ -2934,10 +3032,10 @@ function cartPanel(withTitle){
       for (const [id,left] of lefts){ const cur = state.items.find(i=>i.id===id); const upd = {qty:left, queued:left>0 ? !!cur.queued : false, updatedAt:nowIso()}; if (maps.has(id)) upd.sizes = maps.get(id); await state.db.doc('items/'+id).update(upd); }
       if (state.settingsSaved) await state.db.doc('customers/'+customerId).update({bracket:bracketOf(baseSpent+round2(grand), state.settings.medium, state.settings.large)});
       const sh = round2(num(ship.value)), nt = note.value.trim();
-      if (sh>0 || nt) await saveInvoiceMeta(invNo, {shipping:sh, note:nt});
+      if (sh>0 || nt || carry) await saveInvoiceMeta(invNo, Object.assign({shipping:sh, note:nt}, carry ? {carry:true} : {}));
     });
     if (ok){
-      Object.assign(state.cart, {cid:'', lines:[], ship:'', note:'', newName:'', newHandle:'', newType:''});
+      Object.assign(state.cart, {cid:'', lines:[], ship:'', note:'', newName:'', newHandle:'', newType:'', date:'', carry:null});
       if (cartHost && cartHost.id!=='cartDock') closeSheet();
       drawCart(); toast('Created '+invNo+' · '+money(grand)); setTimeout(()=>openInvoice(invNo), 400);
     } else btn.disabled = false;

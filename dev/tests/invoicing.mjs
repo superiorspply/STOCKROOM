@@ -95,6 +95,23 @@ try {
   const fs = await import('node:fs');
   const page3 = fs.readFileSync(await dl.path(), 'utf8');
   check(page3.includes('Previous balance') && page3.includes('INV-0002') && page3.includes('Total owed') && page3.includes('$4,800.00'), 'the printed invoice shows the previous balance and total owed');
+  check(!page3.includes('Pay now'), 'no Pay now button without a payment link');
+
+  // Payment link: a bad link is refused; a Square link gives the invoice a Pay now button and goes in the text.
+  const link = P.locator('.sheet').getByLabel('Payment link', {exact:true});
+  await link.fill('javascript:alert(1)'); await link.dispatchEvent('change');
+  await P.getByText(/does not look like a web link/).waitFor({timeout:5000});
+  await link.fill('https://square.link/u/TEST123'); await link.dispatchEvent('change');
+  await P.getByText('Payment link saved').waitFor({timeout:5000});
+  const meta3 = await P.evaluate(async () => { const db = await window.claude.use('db'); return (await db.doc('invoices/INV-0003').get()).data(); });
+  check(meta3.payLink === 'https://square.link/u/TEST123', 'the payment link is saved on the invoice');
+  await P.locator('.sheet').getByRole('link', {name:'Open link'}).waitFor({timeout:5000});
+  const [dl2] = await Promise.all([P.waitForEvent('download'), P.getByRole('button', {name:'Save printable web page'}).click()]);
+  const page4 = fs.readFileSync(await dl2.path(), 'utf8');
+  check(page4.includes('class="paynow" href="https://square.link/u/TEST123"'), 'the printed invoice has a Pay now button with the link');
+  await P.locator('.sheet').getByRole('button', {name:'Text payment link'}).click();
+  const msg = await P.getByLabel('Message').inputValue();
+  check(msg.includes('Pay here: https://square.link/u/TEST123'), 'the text message includes the payment link');
 } catch(e){
   results.push('FAIL test crashed: ' + (e && e.stack || e));
 } finally {

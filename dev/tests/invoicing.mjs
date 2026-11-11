@@ -68,12 +68,15 @@ try {
   // A payment through invoice 2 pays the oldest balance first.
   await P.getByRole('heading', {name:/^Invoice INV-0002/}).waitFor({timeout:8000});
   await P.locator('.sheet').getByRole('button', {name:'Record payment'}).click();
-  await P.getByLabel('Zelle amount').fill('1200');
+  await P.getByLabel('Zelle amount').fill('1100');
+  await P.getByLabel('Credit card / Square amount').fill('100');
+  await P.screenshot({path: process.env.SHOT || '/dev/null'}).catch(() => {});
   await P.getByRole('button', {name:'Save payment'}).click();
   await P.getByText(/1,200\.00 recorded · \$2,300\.00 still due/).waitFor({timeout:8000});
   const pays = await P.evaluate(async () => { const db = await window.claude.use('db'); const a = (await db.doc('invoices/INV-0001').get()).data(), b = (await db.doc('invoices/INV-0002').get()).data(); return {a, b}; });
   check(pays.a.paid === true && pays.a.payments[0].amount === 1000 && /Paid with INV-0002/.test(pays.a.payments[0].note), 'the payment pays off invoice 1 first');
-  check(!pays.b.paid && pays.b.payments[0].amount === 200, 'the rest goes on invoice 2');
+  check(!pays.b.paid && pays.b.payments.reduce((a, p) => a + p.amount, 0) === 200, 'the rest goes on invoice 2');
+  check([...pays.a.payments, ...pays.b.payments].some(p => p.method === 'Credit card / Square' && p.amount === 100), 'a credit card / Square payment is recorded');
   await P.getByRole('heading', {name:/^Invoice INV-0002/}).waitFor({timeout:8000});
   const after = await P.locator('.sheet').textContent();
   check(!after.includes('Previous balance') && after.includes('$2,300.00'), 'once invoice 1 is paid, invoice 2 shows only its own balance');

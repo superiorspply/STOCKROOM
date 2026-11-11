@@ -220,7 +220,7 @@ main{max-width:720px;margin:0 auto;padding:6px 16px 190px}
 .goalchart svg{width:100%;height:auto;display:block}.ttlinkcard{cursor:pointer}.ttlinkcard:hover{border-color:var(--accent)}
 .carrybox{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:-4px 0 12px}
 .payline.linkrow{width:100%;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;text-align:left;cursor:pointer}.payline.owed{font-size:16px;border-bottom:0}
-.payrow{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}.paym{font-weight:600;font-size:14px}
+.payrow{display:grid;grid-template-columns:92px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}.paym{font-weight:600;font-size:14px;line-height:1.2}
 .payrow input{width:100%;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#0b0b0d;color:var(--ink);font-size:16px}
 .payrow .btn{padding:10px 12px;border-radius:12px}
 .paysum{margin:6px 0 10px;font-size:14px;font-weight:600}.paysum.over{color:var(--bad)}
@@ -1344,7 +1344,7 @@ const shipLabel = k => (SHIP.find(x=>x[0]===k) || SHIP[0])[1];
 const CARRIERS = ['USPS','UPS','FedEx','DHL','Other'];
 const slugify = n => String(n).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const daysSince = iso => Math.max(0, Math.floor((Date.now()-new Date(iso).getTime())/864e5));
-const PAY_METHODS = ['Zelle','Cash','Wire','Check','PayPal','Cash App','Apple Pay'];
+const PAY_METHODS = ['Zelle','Cash','Wire','Check','PayPal','Cash App','Apple Pay','Credit card / Square'];
 const STATUS_LABEL = {paid:'Paid', partial:'Partial', unpaid:'Unpaid'};
 function paymentsOf(key){ const m = invMeta(key); return Array.isArray(m.payments) ? m.payments.filter(p=>p && num(p.amount)>0) : []; }
 function payInfo(key, total){
@@ -2567,7 +2567,7 @@ function askTools(){
         const more = Math.max(0, rows.length-limit);
         return {totals, group_by:g, rows:rows.slice(0,limit), more_rows_not_shown:more};
       }},
-    {name:'payments_summary', description:'Payments recorded on invoices, grouped by payment method (Zelle, Cash, Wire, Check, PayPal, Cash App, Apple Pay). Optional since/until (YYYY-MM-DD) filter on the payment date.',
+    {name:'payments_summary', description:'Payments recorded on invoices, grouped by payment method (Zelle, Cash, Wire, Check, PayPal, Cash App, Apple Pay, Credit card / Square). Optional since/until (YYYY-MM-DD) filter on the payment date.',
       inputSchema:{type:'object', properties:{since:{type:'string'}, until:{type:'string'}}},
       execute:(a)=>{
         const by = {}; let total = 0, n = 0;

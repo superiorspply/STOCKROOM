@@ -554,7 +554,7 @@ function subscribe(){
   }, ()=>{});
   state.db.doc('settings/timeclock').onSnapshot(d=>{ state.clock = d.exists ? (d.data()||{}) : {}; }, ()=>{});
   state.db.doc('settings/business').onSnapshot(d=>{ state.business = d.exists ? String((d.data()||{}).text||'') : ''; }, ()=>{});
-  state.db.doc('settings/invoicing').onSnapshot(d=>{ state.carryDefault = d.exists && !!(d.data()||{}).carryBalance; }, ()=>{});
+  state.db.doc('settings/invoicing').onSnapshot(d=>{ const v = d.exists ? (d.data()||{}) : {}; state.carryDefault = !!v.carryBalance; state.payLinkDefault = String(v.payLink||''); }, ()=>{});
   state.db.doc('settings/tiktok_goal').onSnapshot(d=>{ state.ttGoal = d.exists ? (d.data()||{}) : null; }, ()=>{});
   for (const name of ['items','customers','sales','invoices']){
     state.db.collection(name).onSnapshot(snap=>{
@@ -1003,6 +1003,10 @@ const skuText = s => (s.custom || s.sku==='CUSTOM') ? '' : (s.sku||'');
 function invNumber(key){ return key.startsWith('S-') ? 'OLD-'+key.slice(2,7).toUpperCase() : key; }
 function invoiceSales(key){ return state.sales.filter(s=>invKey(s)===key).sort((a,b)=>String(a.at).localeCompare(String(b.at))); }
 function invMeta(key){ return state.invoices.find(x=>x.id===key) || {}; }
+// Payment link (Square, PayPal, Cash App, Venmo, ...): the invoice's own, else the default in settings/invoicing.
+// Only http(s) links are used, so nothing else can end up behind a "Pay now" button.
+function safeLink(v){ const t = String(v||'').trim(); if (!t) return ''; try { const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(t) ? t : 'https://'+t); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') ? u.href : ''; } catch(e){ return ''; } }
+function payLinkOf(key){ return safeLink(invMeta(key).payLink) || safeLink(state.payLinkDefault); }
 function nextInvoiceNo(){ let max = 0; for (const s of state.sales){ const m = /^INV-(\d+)$/.exec(s.invoiceNo||''); if (m) max = Math.max(max, +m[1]); } return 'INV-'+String(max+1).padStart(4,'0'); }
 function invoicesFor(cid){
   const map = new Map();
@@ -1012,6 +1016,8 @@ function invoicesFor(cid){
 const invTotal = (key, sub) => round2(sub + num(invMeta(key).shipping));
 const longDate = iso => new Date(iso||Date.now()).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
 
+const payDue = d => !!d.payLink && round2((d.prev||[]).length ? d.owed : d.balance) > 0.004;
+const linkHost = u => { try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return ''; } };
 function invoiceHtml(d){
   const rows = d.lines.map(s=>`<tr><td><div class="n">${esc(lineName(s))}</div>${skuText(s) ? '<div class="k">'+esc(skuText(s))+'</div>' : ''}</td><td class="r">${esc(fmtN(s.qty))}</td><td class="r">${esc(money(s.unitPrice))}</td><td class="r b">${esc(money(s.total))}</td></tr>`).join('');
   const biz = String(state.business||'').split('\n').map(x=>x.trim()).filter(Boolean).map(esc).join('<br>');
@@ -1027,6 +1033,7 @@ body{margin:0;background:#ececef;font-family:'Bricolage Grotesque','Segoe UI',He
 .info{display:flex;justify-content:space-between;gap:24px;padding:30px 44px 8px}
 .lbl{font-size:12px;font-weight:600;color:#8a8a96;margin-bottom:6px}.who{font-size:20px;font-weight:700;margin-bottom:4px}.det{font-size:13.5px;line-height:1.55;color:#4a4a55}
 .due{text-align:right}.pill{display:inline-block;font-size:13px;font-weight:700;color:#fff;border-radius:999px;padding:5px 16px;background:${d.status==='paid'?'#17744a':d.status==='partial'?'#b45f06':'#e5192b'}}.amt{font-size:38px;font-weight:700;letter-spacing:-.02em;margin-top:10px;line-height:1}
+.paynow{display:inline-block;margin-top:14px;background:#e5192b;color:#fff;font-weight:700;font-size:16px;text-decoration:none;border-radius:12px;padding:12px 26px}.paynow small{display:block;font-weight:500;font-size:11px;opacity:.9}
 .tb{padding:20px 44px 0}table{border-collapse:separate;border-spacing:0;width:100%}
 th{background:#0e0e11;color:#fff;font-size:12px;font-weight:600;text-align:left;padding:11px 14px}th:first-child{border-radius:10px 0 0 10px}th:last-child{border-radius:0 10px 10px 0}th.r,td.r{text-align:right}
 td{padding:13px 14px;font-size:14px;vertical-align:top}tbody tr:nth-child(odd) td{background:#f5f5f7}tbody tr td:first-child{border-radius:10px 0 0 10px}tbody tr td:last-child{border-radius:0 10px 10px 0}
@@ -1041,7 +1048,7 @@ td{padding:13px 14px;font-size:14px;vertical-align:top}tbody tr:nth-child(odd) t
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Invoice ${esc(d.no)}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&display=swap"><style>${css}</style></head><body><div class="pg">
 <div class="bar"><button onclick="window.print()">Print</button></div>
 <div class="hd"><div class="red"></div><div class="brand"><img src="${LOGO}" alt="" style="width:62px;height:62px;border-radius:14px;display:block;margin-bottom:14px"><h1>${esc(BRAND())}</h1><div class="x">x Stockroom</div><div class="biz">${biz}</div></div><div class="meta"><div class="t">Invoice</div><div class="no">${esc(d.no)}</div><div class="dt">${esc(longDate(d.date))}</div></div></div>
-<div class="info"><div><div class="lbl">Billed to</div><div class="who">${esc(d.name)}</div><div class="det">${bill}</div></div><div class="due"><span class="pill">${STATUS_LABEL[d.status]}</span><div class="amt">${esc(money((d.prev||[]).length ? d.owed : d.paid ? d.total : d.balance))}</div><div class="lbl" style="margin:6px 0 0">${(d.prev||[]).length ? 'Total owed' : d.paid?'Total paid':'Balance due'}</div></div></div>
+<div class="info"><div><div class="lbl">Billed to</div><div class="who">${esc(d.name)}</div><div class="det">${bill}</div></div><div class="due"><span class="pill">${STATUS_LABEL[d.status]}</span><div class="amt">${esc(money((d.prev||[]).length ? d.owed : d.paid ? d.total : d.balance))}</div><div class="lbl" style="margin:6px 0 0">${(d.prev||[]).length ? 'Total owed' : d.paid?'Total paid':'Balance due'}</div>${payDue(d) ? '<a class="paynow" href="'+esc(d.payLink)+'" target="_blank" rel="noopener">Pay now<small>'+esc(linkHost(d.payLink))+'</small></a>' : ''}</div></div>
 <div class="tb"><table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price each</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
 <div class="bot"><div class="note">${d.note ? '<b>Notes</b>'+esc(d.note) : ''}</div><div class="tot"><div class="l"><span>Subtotal</span><span>${esc(money(d.subtotal))}</span></div>${d.shipping>0 ? '<div class="l"><span>Shipping</span><span>'+esc(money(d.shipping))+'</span></div>' : ''}<div class="g"><span>Total</span><b>${esc(money(d.total))}</b></div>${(d.payments||[]).map(p=>'<div class="l"><span>Paid · '+esc(p.method)+' · '+esc(fmtDate(p.at))+'</span><span>-'+esc(money(p.amount))+'</span></div>').join('')}${(d.payments||[]).length ? '<div class="l" style="font-weight:700"><span>'+(d.paid ? 'Paid in full' : 'Balance due')+'</span><span>'+esc(money(d.balance))+'</span></div>' : ''}${(d.prev||[]).length ? d.prev.map(v=>'<div class="l"><span>Previous balance · '+esc(v.no)+' · '+esc(fmtDate(v.at))+'</span><span>'+esc(money(v.balance))+'</span></div>').join('')+'<div class="l" style="font-weight:700;font-size:16px;padding-bottom:14px"><span>Total owed</span><span>'+esc(money(d.owed))+'</span></div>' : ''}</div></div>
 <div class="ft"><span>Thank you for your business.</span><span>${esc(d.no)}</span></div></div></body></html>`;
@@ -1078,6 +1085,14 @@ function makeInvoicePdf(d){
   const hasPrev = (d.prev||[]).length > 0;
   ink(INK); font('bold',28); doc.text(ascii(money(hasPrev ? d.owed : d.paid ? d.total : d.balance)), W-M, y+46, {align:'right'});
   ink(MUTE); font('normal',9); doc.text(hasPrev ? 'Total owed' : d.paid ? 'Total paid' : 'Balance due', W-M, y+62, {align:'right'});
+  if (payDue(d)){
+    const bw2 = 120, bx2 = W-M-bw2, by2 = y+74;
+    fill(RED); doc.roundedRect(bx2, by2, bw2, 26, 8, 8, 'F');
+    ink(WHITE); font('bold',11); doc.text('Pay now', bx2+bw2/2, by2+17, {align:'center'});
+    doc.link(bx2, by2, bw2, 26, {url:d.payLink});
+    ink(MUTE); font('normal',8); doc.textWithLink(ascii(linkHost(d.payLink)), W-M, by2+38, {url:d.payLink, align:'right'});
+    y += 54;
+  }
   y = Math.max(y + 37 + bill.length*13, y + 62) + 30;
 
   const C = {qty:392, price:482, total:W-M-12};
@@ -1166,7 +1181,7 @@ function openInvoice(key){
   const collect = ()=>{
     const sh = round2(num(ship.value)); const a = addrs[int(addrSel.value)] || null; const info = payInfo(key, round2(sub+sh));
     const prev = prevOf(key);
-    return {key, no:invNumber(key), date:first.at, name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), paid:info.paid, status:info.status, paidAmt:info.paidAmt, balance:info.balance, payments:paymentsOf(key), note:noteIn.value.trim(), track:trackText(invMeta(key)),
+    return {key, no:invNumber(key), date:first.at, name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), paid:info.paid, status:info.status, paidAmt:info.paidAmt, balance:info.balance, payments:paymentsOf(key), note:noteIn.value.trim(), track:trackText(invMeta(key)), payLink:payLinkOf(key),
       prev, owed:round2(info.balance+prev.reduce((x,v)=>x+v.balance,0))};
   };
   const payBox = h('div',{class:'paybox'});
@@ -1176,6 +1191,13 @@ function openInvoice(key){
   carryChk.addEventListener('change', async ()=>{ const ok = await write(()=>saveInvoiceMeta(key,{carry:carryChk.checked})); if (ok) openInvoice(key); else carryChk.checked = !carryChk.checked; });
   const carryBox = earlier.length && (state.canWrite || meta.carry) ? h('label',{class:'chk',style:'margin-top:10px'}, carryChk,
     h('span',{}, 'Add their unpaid balance from earlier invoices ('+money(round2(earlier.reduce((x,v)=>x+v.balance,0)))+')')) : null;
+  // Payment link: paste one (a Square link, for example) and the invoice gets a Pay now button.
+  const linkIn = h('input',{type:'url',inputmode:'url',autocomplete:'off',autocapitalize:'off',placeholder:state.payLinkDefault ? 'Default: '+state.payLinkDefault : 'https://square.link/…',value:meta.payLink||'',disabled:!state.canWrite,'aria-label':'Payment link'});
+  linkIn.addEventListener('change', async ()=>{
+    const v = linkIn.value.trim(), ok = !v || safeLink(v);
+    if (!ok){ toast('That does not look like a web link. It should start with https://'); return; }
+    if (await write(()=>saveInvoiceMeta(key,{payLink:ok ? safeLink(v) : ''}))){ toast(v ? 'Payment link saved' : 'Payment link removed'); setTimeout(upd, 200); }
+  });
   const drawPay = d=>{
     payBox.replaceChildren(...[
       h('div',{class:'hh',style:'margin:0 0 6px'},'Payments'),
@@ -1186,6 +1208,8 @@ function openInvoice(key){
         ...d.prev.map(v=>h('button',{class:'payline linkrow',type:'button',onclick:()=>openInvoice(v.key)}, h('span',{}, v.no+' · '+fmtDate(v.at)), h('b',{}, money(v.balance)))),
         h('div',{class:'payline owed'}, h('span',{},'Total owed'), h('b',{}, money(d.owed)))] : []),
       carryBox,
+      (state.canWrite || d.payLink) ? h('div',{style:'margin-top:12px'}, field('Payment link', linkIn, 'Paste a Square (or PayPal, Cash App, Venmo) payment link. The invoice gets a Pay now button and the text message includes it.')) : null,
+      payDue(d) ? h('div',{class:'foot',style:'margin-top:0'}, h('a',{class:'btn',href:d.payLink,target:'_blank',rel:'noopener',style:'text-align:center;text-decoration:none'},'Open link'), h('button',{class:'btn',type:'button',onclick:()=>openRemind(key)},'Text payment link')) : null,
       h('button',{class:'btn'+(d.owed>0.004 ? ' primary' : ''),type:'button',style:'margin-top:10px',onclick:()=>openPayment(key, ()=>openInvoice(key))}, d.owed>0.004 ? 'Record payment' : 'Edit payments')].filter(Boolean));
   };
   const upd = ()=>{ const d = collect(); totalEl.textContent = 'Total: '+money(d.total);
@@ -1216,6 +1240,13 @@ function openInvoice(key){
   const saveBtn = h('button',{class:'btn',type:'button',onclick:async()=>{ const ok = await write(()=>saveInvoiceMeta(key,{shipping:collect().shipping, note:noteIn.value.trim(), addrIdx:int(addrSel.value)})); if (ok) toast('Invoice saved'); }},'Save details');
   const bizIn = h('textarea',{placeholder:'Business name, address, phone, email (one per line)'}); bizIn.value = state.business||'';
   const bizBtn = h('button',{class:'btn',type:'button',onclick:async()=>{ const ok = await write(()=>state.db.doc('settings/business').set({text:bizIn.value.trim(), updatedAt:nowIso()})); if (ok){ state.business = bizIn.value.trim(); toast('Business details saved'); } }},'Save business details');
+  const defLinkIn = h('input',{type:'url',inputmode:'url',autocomplete:'off',autocapitalize:'off',placeholder:'https://…',value:state.payLinkDefault||'','aria-label':'Default payment link'});
+  const defLinkBtn = h('button',{class:'btn',type:'button',onclick:async()=>{
+    const v = defLinkIn.value.trim(), l = safeLink(v);
+    if (v && !l){ toast('That does not look like a web link. It should start with https://'); return; }
+    const ok = await write(()=>state.db.doc('settings/invoicing').set({carryBalance:!!state.carryDefault, payLink:l, updatedAt:nowIso()}));
+    if (ok){ state.payLinkDefault = l; toast(l ? 'Default payment link saved' : 'Default payment link removed'); upd(); }
+  }},'Save default link');
   const billLines = [cust ? cust.name : (first.customerName||'Walk-in customer'), cust&&cust.handle, cust&&cust.phone, cust&&cust.email].filter(Boolean);
   openSheet('Invoice '+invNumber(key), h('div',{},
     h('div',{class:'invhero'}, h('div',{}, h('span',{class:'ih1'},'Invoice'), h('b',{class:'ih2'}, invNumber(key)), h('span',{class:'ih1'}, longDate(first.at))), h('div',{style:'text-align:right'}, heroState, heroTotal)),
@@ -1227,7 +1258,8 @@ function openInvoice(key){
     h('div',{class:'grid2'}, field('Shipping ($)', ship), field('Note on invoice', noteIn)),
     field('Invoice date', dateIn, 'Sales and profit count on this day. Changing it moves every line of this invoice.'),
     payBox,
-    h('details',{class:'sizes'}, h('summary',{},'Your business details on invoices'), h('div',{style:'margin-top:8px'}, field('Shown at the top of every invoice', bizIn), bizBtn)),
+    h('details',{class:'sizes'}, h('summary',{},'Your business details on invoices'), h('div',{style:'margin-top:8px'}, field('Shown at the top of every invoice', bizIn), bizBtn,
+      state.isAdmin ? h('div',{style:'margin-top:12px'}, field('Default payment link', defLinkIn, 'Used on every unpaid invoice that has no link of its own, for example your Square, PayPal.me or Cash App link.'), defLinkBtn) : null)),
     h('div',{class:'stickyfoot'}, h('div',{class:'foot',style:'flex-direction:column'}, pdfBtn, state.canWrite ? h('button',{class:'btn',type:'button',onclick:()=>openInvoiceEdit(key)},'Edit items') : null, htmlBtn, shipBtn, packBtn, saveBtn))), {noFocus:true});
 }
 
@@ -1402,7 +1434,7 @@ function baseInvoice(key){
   const a = addrs[Math.min(int(m.addrIdx), Math.max(0, addrs.length-1))] || null;
   const sub = round2(lines.reduce((x,s)=>x+(s.total||0),0)); const sh = round2(num(m.shipping));
   const info = payInfo(key, round2(sub+sh)), prev = prevOf(key);
-  return {key, no:invNumber(key), date:first.at||'', name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), ...info, payments:paymentsOf(key), note:m.note||'', track:trackText(m),
+  return {key, no:invNumber(key), date:first.at||'', name: cust ? cust.name : (first.customerName || 'Walk-in customer'), handle:cust ? cust.handle : '', phone:cust ? cust.phone : '', email:cust ? cust.email : '', address:a ? a.text : '', lines, subtotal:sub, shipping:sh, total:round2(sub+sh), ...info, payments:paymentsOf(key), note:m.note||'', track:trackText(m), payLink:payLinkOf(key),
     prev, owed:round2(info.balance+prev.reduce((x,v)=>x+v.balance,0))};
 }
 function allInvoices(){
@@ -1502,6 +1534,7 @@ function openRemind(key){
   const first = String(d.name).trim().split(/\s+/)[0] || 'there';
   const msg = h('textarea',{style:'min-height:130px'});
   msg.value = d.paidAmt>0 ? `Hi ${first}, this is ${BRAND()}. Thank you for your payment so far. Just a friendly reminder that invoice ${d.no} from ${fmtDate(d.date)} still has a balance of ${money(d.balance)}. Please let me know if you have any questions. Thank you!` : `Hi ${first}, this is ${BRAND()}. Just a friendly reminder that invoice ${d.no} for ${money(d.total)} from ${fmtDate(d.date)} is still unpaid. Please let me know if you have any questions. Thank you!`;
+  if (payDue(d)) msg.value += `\n\nPay here: ${d.payLink}`;
   const phone = String(d.phone||'').replace(/[^\d+]/g,'');
   const smsA = phone ? h('a',{class:'btn primary',style:'text-align:center;text-decoration:none'},'Open in Messages') : null;
   const mailA = d.email ? h('a',{class:'btn',style:'text-align:center;text-decoration:none'},'Open in Email') : null;
@@ -3012,7 +3045,7 @@ function cartPanel(withTitle){
     const cb = h('input',{type:'checkbox',checked:carryOn()}); cb.addEventListener('change', ()=>{ C.carry = cb.checked; saveCart(); });
     const def = state.isAdmin ? h('input',{type:'checkbox',checked:!!state.carryDefault}) : null;
     if (def) def.addEventListener('change', async ()=>{
-      const ok = await write(()=>state.db.doc('settings/invoicing').set({carryBalance:def.checked, updatedAt:nowIso()}));
+      const ok = await write(()=>state.db.doc('settings/invoicing').set({carryBalance:def.checked, payLink:state.payLinkDefault||'', updatedAt:nowIso()}));
       if (!ok){ def.checked = !def.checked; return; }
       state.carryDefault = def.checked; if (C.carry==null) cb.checked = def.checked;
       toast(def.checked ? 'Unpaid balances will be added to new invoices' : 'Unpaid balances will not be added unless you tick the box');

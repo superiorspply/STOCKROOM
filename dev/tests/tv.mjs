@@ -56,6 +56,8 @@ try {
   await P.waitForFunction(() => { const v = document.querySelector('#tv video'); return v && !v.hidden && v.videoWidth > 0; }, null, {timeout:10000});
   check(await tv.locator('.onair.on').count() === 1, 'the shared LIVE tab plays on the TV and LIVE lights up');
 
+  await tv.getByRole('button', {name:'Test sound'}).click();
+  check(await tv.getByRole('slider', {name:'Order sound volume'}).count() === 1, 'the order sound can be tested and its volume set');
   if (process.env.SHOT) await P.screenshot({path:process.env.SHOT});
   await tv.getByRole('button', {name:'Exit TV'}).click();
   check(await P.locator('#tv').count() === 0, 'Exit TV goes back to Stockroom');

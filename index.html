@@ -4515,10 +4515,11 @@ function ptNow(){
   return {start:Date.UTC(+p.year, +p.month-1, +p.day) - off, hour:+p.hour, off};
 }
 // New-order sounds for the TV, made with Web Audio (no sound files): five slot machines ('slots' classic,
-// 'vegas' jackpot alarm, 'lever' pull, 'arcade' win, 'counter' credit meter), all ending in a payout of coins, 'register' (drawer, bell and coins),
+// 'vegas' jackpot alarm, 'lever' pull, 'arcade' win, 'counter' credit meter), all ending in a payout of coins,
+// 'craps' (dice shaken, thrown and bouncing, then a win bell, a cheer and chips), 'register' (drawer, bell and coins),
 // 'coins' (a bright two-note bling) or 'bell' (a soft three-note ding). A big order plays a fuller version.
 // Everything goes through a little room echo and a compressor so it sounds natural and carries.
-const TV_SOUNDS = [['slots','Slot machine: classic'],['vegas','Slot machine: Vegas jackpot'],['lever','Slot machine: lever pull'],['arcade','Slot machine: arcade win'],['counter','Slot machine: credit counter'],
+const TV_SOUNDS = [['slots','Slot machine: classic'],['vegas','Slot machine: Vegas jackpot'],['lever','Slot machine: lever pull'],['arcade','Slot machine: arcade win'],['counter','Slot machine: credit counter'],['craps','Craps: dice roll'],
   ['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
 function tvSound(a, kind, big, vol){
   const t0 = a.currentTime + 0.03;
@@ -4539,6 +4540,29 @@ function tvSound(a, kind, big, vol){
   };
   // Coins landing in a pile: bunched at first, then thinning out, in a lower, warmer range.
   const coins = (t, count, spread)=>{ let x = t; for (let i=0;i<count;i++){ x += spread * (0.35 + Math.random()*0.9) * (1 + i/count); clink(x, 1700 + Math.random()*2600, 1.1 + Math.random()*0.7); } };
+  if (kind==='craps'){
+    // Dice: a hard plastic clack (short noise through a resonant filter, plus a tiny knock).
+    const die = (t, peak)=>{ const f = 1800 + Math.random()*1600, n = noise(0.03), bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 9;
+      n.connect(bp); env(bp, t, peak, 0.035, 0.001); n.start(t); n.stop(t+0.04); tone(420 + Math.random()*200, t, peak*0.25, 0.03, 'triangle', 0.001); };
+    // Shaken in the hand: a muffled rattle.
+    for (let i=0;i<14;i++){ const t = t0 + i*0.028 + Math.random()*0.01; die(t, 0.35 + Math.random()*0.2); }
+    // Thrown: two dice tumbling across the felt, each bounce shorter, then off the back wall and settling.
+    const land = t0 + 0.5;
+    [0, 0.018].forEach(off=>{ let t = land + off, gap = 0.13;
+      for (let i=0;i<9;i++){ die(t, i===5 ? 1.1 : 0.8 - i*0.06); t += gap; gap *= 0.72; } });
+    const win = land + 0.62;
+    // The win: a bright casino bell and a cheer (filtered noise swelling and fading, wobbling like voices).
+    [[1319, 0.4], [1568, 0.3], [2093, 0.22]].forEach(([f, v], i)=>tone(f, win + i*0.06, v, 1.1));
+    const crowd = noise(1.6), cb = a.createBiquadFilter(); cb.type = 'bandpass'; cb.frequency.value = 900; cb.Q.value = 0.7;
+    const wob = a.createOscillator(), wg = a.createGain(); wob.frequency.value = 7; wg.gain.value = 260; wob.connect(wg).connect(cb.frequency); wob.start(win); wob.stop(win + 1.6);
+    crowd.connect(cb); const cg = a.createGain(); cg.gain.setValueAtTime(0.0001, win); cg.gain.exponentialRampToValueAtTime(big ? 0.55 : 0.32, win + 0.25); cg.gain.exponentialRampToValueAtTime(0.0001, win + (big ? 1.5 : 1.1));
+    cb.connect(cg).connect(out); crowd.start(win); crowd.stop(win + 1.6);
+    // Chips being paid and stacked: lower, clay-like clicks in little runs.
+    let t = win + 0.18;
+    for (let r=0;r<(big ? 6 : 3);r++){ for (let i=0;i<5;i++){ const n = noise(0.025), bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 + Math.random()*900; bp.Q.value = 6;
+      n.connect(bp); env(bp, t, 0.9, 0.03, 0.001); n.start(t); n.stop(t+0.03); t += 0.035 + Math.random()*0.015; } t += 0.09; }
+    return;
+  }
   if (kind==='vegas'){
     // The casino jackpot alarm: a bell hammered fast over a held chord, with coins pouring the whole time.
     const hits = big ? 26 : 16, rate = 0.07;

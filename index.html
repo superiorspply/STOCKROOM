@@ -4519,7 +4519,7 @@ function ptNow(){
 // 'craps' (dice shaken, thrown and bouncing, then a win bell, a cheer and chips), 'register' (drawer, bell and coins),
 // 'coins' (a bright two-note bling) or 'bell' (a soft three-note ding). A big order plays a fuller version.
 // Everything goes through a little room echo and a compressor so it sounds natural and carries.
-const TV_SOUNDS = [['slots','Slot machine: classic'],['vegas','Slot machine: Vegas jackpot'],['lever','Slot machine: lever pull'],['arcade','Slot machine: arcade win'],['counter','Slot machine: credit counter'],['craps','Craps: dice roll'],
+const TV_SOUNDS = [['craps','Craps: dice roll'],['slots','Slot machine: classic'],['vegas','Slot machine: Vegas jackpot'],['lever','Slot machine: lever pull'],['arcade','Slot machine: arcade win'],['counter','Slot machine: credit counter'],
   ['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
 function tvSound(a, kind, big, vol){
   const t0 = a.currentTime + 0.03;
@@ -4648,7 +4648,7 @@ function openTV(){
   const volIn = h('input',{type:'range',min:'0',max:'1',step:'0.05',value:String(T.vol),'aria-label':'Order sound volume',style:'width:9vw;accent-color:#e5192b'});
   volIn.addEventListener('input', ()=>{ T.vol = +volIn.value; try { localStorage.setItem('ss_tvvol', String(T.vol)); } catch(e){} });
   volIn.addEventListener('change', ()=>chime());
-  T.soundKind = (()=>{ try { const k = localStorage.getItem('ss_tvsoundkind'); return TV_SOUNDS.some(x=>x[0]===k) ? k : 'slots'; } catch(e){ return 'slots'; } })();
+  T.soundKind = (()=>{ try { const k = localStorage.getItem('ss_tvsoundkind'); return TV_SOUNDS.some(x=>x[0]===k) ? k : 'craps'; } catch(e){ return 'craps'; } })();
   const kindSel = h('select',{'aria-label':'Order sound',style:'background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.7vh .6vw;font:inherit;font-size:1.6vh'},
     TV_SOUNDS.map(([k,l])=>{ const o = h('option',{value:k},l); if (k===T.soundKind) o.selected = true; return o; }));
   kindSel.addEventListener('change', ()=>{ T.soundKind = kindSel.value; try { localStorage.setItem('ss_tvsoundkind', T.soundKind); } catch(e){} const was = T.sound; T.sound = true; chime(); T.sound = was; });

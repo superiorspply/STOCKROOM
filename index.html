@@ -4514,11 +4514,12 @@ function ptNow(){
   const asUtc = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second), off = asUtc - Math.floor(n/1000)*1000;
   return {start:Date.UTC(+p.year, +p.month-1, +p.day) - off, hour:+p.hour, off};
 }
-// New-order sounds for the TV, made with Web Audio (no sound files): 'slots' (reels, then a jackpot payout of
-// coins), 'register' (drawer, bell and coins),
+// New-order sounds for the TV, made with Web Audio (no sound files): five slot machines ('slots' classic,
+// 'vegas' jackpot alarm, 'lever' pull, 'arcade' win, 'counter' credit meter), all ending in a payout of coins, 'register' (drawer, bell and coins),
 // 'coins' (a bright two-note bling) or 'bell' (a soft three-note ding). A big order plays a fuller version.
 // Everything goes through a little room echo and a compressor so it sounds natural and carries.
-const TV_SOUNDS = [['slots','Slot machine'],['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
+const TV_SOUNDS = [['slots','Slot machine: classic'],['vegas','Slot machine: Vegas jackpot'],['lever','Slot machine: lever pull'],['arcade','Slot machine: arcade win'],['counter','Slot machine: credit counter'],
+  ['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
 function tvSound(a, kind, big, vol){
   const t0 = a.currentTime + 0.03;
   const comp = a.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 8; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.25;
@@ -4538,6 +4539,44 @@ function tvSound(a, kind, big, vol){
   };
   // Coins landing in a pile: bunched at first, then thinning out, in a lower, warmer range.
   const coins = (t, count, spread)=>{ let x = t; for (let i=0;i<count;i++){ x += spread * (0.35 + Math.random()*0.9) * (1 + i/count); clink(x, 1700 + Math.random()*2600, 1.1 + Math.random()*0.7); } };
+  if (kind==='vegas'){
+    // The casino jackpot alarm: a bell hammered fast over a held chord, with coins pouring the whole time.
+    const hits = big ? 26 : 16, rate = 0.07;
+    for (let i=0;i<hits;i++){ const t = t0 + i*rate, f = i%2 ? 1175 : 1109;
+      tone(f, t, 0.3, 0.12, 'sine', 0.001); tone(f*2.76, t, 0.08, 0.06); }
+    [262, 330, 392].forEach(f=>tone(f, t0, 0.13, hits*rate + 0.3, 'sawtooth', 0.05));
+    coins(t0 + 0.05, big ? 70 : 44, 0.02);
+    return;
+  }
+  if (kind==='lever'){
+    // Pulling the handle (a ratchet), the reels rolling, each reel landing with a "ding", then a heavy payout.
+    for (let i=0;i<10;i++){ const t = t0 + i*0.022; clink(t, 900 + i*40, 0.5); }
+    const roll = t0 + 0.26, n = big ? 18 : 12;
+    for (let i=0;i<n;i++){ const t = roll + i*0.045; tone(330, t, 0.1, 0.03, 'triangle', 0.001); }
+    const land = roll + n*0.045;
+    [784, 988, 1175].forEach((f,i)=>{ const t = land + i*0.16; tone(150, t, 0.45, 0.08, 'triangle', 0.001); tone(f, t+0.01, 0.34, 0.5); tone(f*2, t+0.01, 0.08, 0.25); });
+    if (big) tone(1568, land + 0.5, 0.34, 0.8);
+    coins(land + 0.42, big ? 56 : 34, 0.024);
+    return;
+  }
+  if (kind==='arcade'){
+    // An 8-bit win jingle: a quick run up and back with a sparkle at the top, then coins as little blips.
+    const run = big ? [523, 659, 784, 1047, 784, 1047, 1319, 1568] : [523, 659, 784, 1047, 1319];
+    run.forEach((f,i)=>{ const t = t0 + i*0.07; tone(f, t, 0.26, i===run.length-1 ? 0.45 : 0.08, 'square', 0.001); tone(f/2, t, 0.12, 0.07, 'triangle', 0.001); });
+    const end = t0 + run.length*0.07;
+    for (let i=0;i<(big ? 16 : 10);i++){ const t = end + 0.12 + i*0.05; tone(988 + (i%2)*329, t, 0.16, 0.05, 'square', 0.001); }
+    coins(end + 0.1, big ? 30 : 18, 0.03);
+    return;
+  }
+  if (kind==='counter'){
+    // The win meter counting up credits: ticks speeding up and rising, then a bell and the coins.
+    const ticks = big ? 40 : 26;
+    let t = t0;
+    for (let i=0;i<ticks;i++){ const step = 0.07 * Math.pow(0.94, i) + 0.018; tone(600 + i*22, t, 0.18, 0.04, 'square', 0.001); t += step; }
+    tone(1047, t+0.02, 0.4, 0.9); tone(1319, t+0.02, 0.25, 0.8); tone(1568, t+0.02, 0.2, 0.7);
+    coins(t + 0.05, big ? 44 : 28, 0.024);
+    return;
+  }
   if (kind==='slots'){
     // Reels spinning (fast clicking beeps rising), three reels stopping with a clunk, a jackpot fanfare,
     // then the payout: a long rush of coins into the tray.

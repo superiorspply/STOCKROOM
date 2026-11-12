@@ -4514,10 +4514,11 @@ function ptNow(){
   const asUtc = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second), off = asUtc - Math.floor(n/1000)*1000;
   return {start:Date.UTC(+p.year, +p.month-1, +p.day) - off, hour:+p.hour, off};
 }
-// New-order sounds for the TV, made with Web Audio (no sound files): 'register' (drawer, bell and coins),
+// New-order sounds for the TV, made with Web Audio (no sound files): 'slots' (reels, then a jackpot payout of
+// coins), 'register' (drawer, bell and coins),
 // 'coins' (a bright two-note bling) or 'bell' (a soft three-note ding). A big order plays a fuller version.
 // Everything goes through a little room echo and a compressor so it sounds natural and carries.
-const TV_SOUNDS = [['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
+const TV_SOUNDS = [['slots','Slot machine'],['register','Cash register'],['coins','Coin drop'],['bell','Soft bell']];
 function tvSound(a, kind, big, vol){
   const t0 = a.currentTime + 0.03;
   const comp = a.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 8; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.25;
@@ -4531,18 +4532,34 @@ function tvSound(a, kind, big, vol){
   const env = (node, t, peak, decay, attack)=>{ const g = a.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t+(attack||0.003)); g.gain.exponentialRampToValueAtTime(0.0001, t+decay); node.connect(g).connect(out); return g; };
   const tone = (f, t, peak, decay, type, attack)=>{ const o = a.createOscillator(); o.type = type || 'sine'; o.frequency.value = f; env(o, t, peak, decay, attack); o.start(t); o.stop(t+decay+0.05); return o; };
   // A metal clink: a burst of noise through a narrow resonant filter.
-  const clink = (t, f, peak)=>{ const n = noise(0.04), bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 30; n.connect(bp); env(bp, t, peak, 0.09); n.start(t); n.stop(t+0.05); };
-  const coins = (t, count, spread)=>{ for (let i=0;i<count;i++) clink(t + i*spread + Math.random()*spread*0.6, 4200 + Math.random()*5200, 0.9 + Math.random()*0.6); };
+  const clink = (t, f, peak)=>{
+    [[f, 18, peak, 0.14], [f*2.4, 26, peak*0.35, 0.07]].forEach(([fr, q, pk, d])=>{
+      const n = noise(0.05), bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q; n.connect(bp); env(bp, t, pk, d); n.start(t); n.stop(t+0.06); });
+  };
+  // Coins landing in a pile: bunched at first, then thinning out, in a lower, warmer range.
+  const coins = (t, count, spread)=>{ let x = t; for (let i=0;i<count;i++){ x += spread * (0.35 + Math.random()*0.9) * (1 + i/count); clink(x, 1700 + Math.random()*2600, 1.1 + Math.random()*0.7); } };
+  if (kind==='slots'){
+    // Reels spinning (fast clicking beeps rising), three reels stopping with a clunk, a jackpot fanfare,
+    // then the payout: a long rush of coins into the tray.
+    const spin = big ? 22 : 14;
+    for (let i=0;i<spin;i++){ const t = t0 + i*0.032, f = 440 + i*28; tone(f, t, 0.16, 0.03, 'square', 0.001); }
+    const stops = t0 + spin*0.032;
+    for (let r=0;r<3;r++){ const t = stops + r*0.09; tone(160 - r*12, t, 0.5, 0.09, 'triangle', 0.001); clink(t, 1400, 0.8); }
+    const fan = stops + 0.3, notes = big ? [523, 659, 784, 1047, 784, 1047] : [523, 659, 784, 1047];
+    notes.forEach((f,i)=>{ const t = fan + i*0.075; tone(f, t, 0.3, i===notes.length-1 ? 0.6 : 0.12, 'square', 0.002); tone(f*2, t, 0.1, 0.2); });
+    coins(fan + 0.08, big ? 60 : 36, 0.022);
+    return;
+  }
   if (kind==='coins'){
     // Bling: two quick bright notes with a soft square edge, then coins shimmering.
-    const notes = big ? [1760, 2349, 3136] : [1760, 2637];
-    notes.forEach((f,i)=>{ const t = t0 + i*0.085; tone(f, t, 0.46, i===notes.length-1 ? 0.75 : 0.16, 'square', 0.002); tone(f*2, t, 0.17, 0.3); });
-    coins(t0 + 0.1, big ? 14 : 8, 0.035);
+    const notes = big ? [988, 1319, 1760] : [988, 1480];
+    notes.forEach((f,i)=>{ const t = t0 + i*0.09; tone(f, t, 0.4, i===notes.length-1 ? 0.7 : 0.16, 'triangle', 0.002); tone(f/2, t, 0.25, 0.3); });
+    coins(t0 + 0.12, big ? 34 : 22, 0.03);
     return;
   }
   if (kind==='bell'){
     // Three-note ding (a bright major chord, played up), each like a struck glass bar.
-    const notes = big ? [1047, 1319, 1568, 2093] : [1319, 1568, 2093];
+    const notes = big ? [523, 659, 784, 1047] : [659, 784, 1047];
     notes.forEach((f,i)=>{ const t = t0 + i*0.11, d = 1.3 - i*0.1;
       tone(f, t, 0.52, d); tone(f*2.76, t, 0.1, d*0.35); tone(f*5.4, t, 0.045, d*0.15); });
     return;
@@ -4552,9 +4569,9 @@ function tvSound(a, kind, big, vol){
   drawer.connect(lp); env(lp, t0, 0.55, 0.3, 0.01); drawer.start(t0); drawer.stop(t0+0.33);
   const thud = a.createOscillator(); thud.frequency.setValueAtTime(120, t0+0.02); thud.frequency.exponentialRampToValueAtTime(45, t0+0.18); env(thud, t0+0.02, 0.8, 0.2); thud.start(t0+0.02); thud.stop(t0+0.25);
   const bell = t=>{ [[1, 0.5, 1.8], [2.0, 0.16, 1.1], [2.76, 0.22, 0.9], [4.07, 0.08, 0.6], [5.40, 0.1, 0.45]].forEach(([r, v, d])=>{
-    tone(1480*r, t, v, d); tone(1480*r*1.003, t, v*0.5, d*0.9); }); };
+    tone(988*r, t, v, d); tone(988*r*1.003, t, v*0.5, d*0.9); }); };
   bell(t0 + 0.06); if (big) bell(t0 + 0.4);
-  coins(t0 + 0.14, big ? 16 : 10, 0.05);
+  coins(t0 + 0.12, big ? 36 : 24, 0.032);
 }
 function openTV(){
   if ($('#tv')) return;
@@ -4568,7 +4585,7 @@ function openTV(){
   const volIn = h('input',{type:'range',min:'0',max:'1',step:'0.05',value:String(T.vol),'aria-label':'Order sound volume',style:'width:9vw;accent-color:#e5192b'});
   volIn.addEventListener('input', ()=>{ T.vol = +volIn.value; try { localStorage.setItem('ss_tvvol', String(T.vol)); } catch(e){} });
   volIn.addEventListener('change', ()=>chime());
-  T.soundKind = (()=>{ try { const k = localStorage.getItem('ss_tvsoundkind'); return TV_SOUNDS.some(x=>x[0]===k) ? k : 'register'; } catch(e){ return 'register'; } })();
+  T.soundKind = (()=>{ try { const k = localStorage.getItem('ss_tvsoundkind'); return TV_SOUNDS.some(x=>x[0]===k) ? k : 'slots'; } catch(e){ return 'slots'; } })();
   const kindSel = h('select',{'aria-label':'Order sound',style:'background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.7vh .6vw;font:inherit;font-size:1.6vh'},
     TV_SOUNDS.map(([k,l])=>{ const o = h('option',{value:k},l); if (k===T.soundKind) o.selected = true; return o; }));
   kindSel.addEventListener('change', ()=>{ T.soundKind = kindSel.value; try { localStorage.setItem('ss_tvsoundkind', T.soundKind); } catch(e){} const was = T.sound; T.sound = true; chime(); T.sound = was; });

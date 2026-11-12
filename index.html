@@ -383,6 +383,55 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
   .labelwrap,.labelwrap *{visibility:visible}
   .labelwrap{position:absolute;left:0;top:0;width:100%;border:0}
 }
+/* TV dashboard: full screen, made for a TV across the room */
+#tv{position:fixed;inset:0;z-index:80;background:#050506;color:#f6f6f8;display:grid;grid-template-rows:auto 1fr auto;gap:1.2vh;padding:2vh 2vw;font-family:'IBM Plex Sans',system-ui,sans-serif;overflow:hidden}
+#tv .tvtop{display:flex;align-items:center;gap:1.2vw}
+#tv .tvtop img{width:4.4vh;height:4.4vh;border-radius:1vh}
+#tv .tvtop h2{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:3.2vh;letter-spacing:-.02em}
+#tv .onair{font-size:1.7vh;font-weight:700;letter-spacing:.12em;border-radius:99px;padding:.5vh 1.2vh;background:#222228;color:#9a9aa6}
+#tv .onair.on{background:#e5192b;color:#fff;animation:tvpulse 1.6s ease-in-out infinite}
+@keyframes tvpulse{50%{box-shadow:0 0 0 .8vh rgba(229,25,43,.25)}}
+#tv .clock{margin-left:auto;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:4vh;font-weight:700;font-variant-numeric:tabular-nums}
+#tv .tvctl{display:flex;gap:.6vw;transition:opacity .4s}
+#tv.idle .tvctl{opacity:0}
+#tv.idle{cursor:none}
+#tv .tvctl button{background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.8vh 1.2vw;font:inherit;font-size:1.6vh;cursor:pointer}
+#tv .tvmain{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,.78fr);gap:1.4vw;min-height:0}
+#tv .tvlive{position:relative;background:#000;border:1px solid #1c1c21;border-radius:2vh;overflow:hidden;display:grid;place-items:center;min-height:0}
+#tv .tvlive video{width:100%;height:100%;object-fit:contain;display:block}
+#tv .tvlive .ph{text-align:center;padding:4vh;max-width:70%}
+#tv .tvlive .ph p{color:#9a9aa6;font-size:2vh;margin:1.4vh 0 2.4vh}
+#tv .bigbtn{background:#e5192b;color:#fff;border:0;border-radius:1.4vh;padding:1.6vh 3vw;font:inherit;font-size:2.4vh;font-weight:700;cursor:pointer}
+#tv .side{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:1.4vh;min-height:0}
+#tv .card{background:#101013;border:1px solid #1c1c21;border-radius:2vh;padding:1.8vh 1.4vw;min-width:0}
+#tv .lbl{font-size:1.6vh;color:#9a9aa6;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+#tv .today b{display:block;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:9vh;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:.6vh 0}
+#tv .today span{font-size:2vh;color:#c3c3cc}
+#tv .hours{display:flex;align-items:flex-end;gap:.3vw;height:7vh;margin-top:1.2vh}
+#tv .hours i{flex:1;background:#2a2a31;border-radius:.4vh .4vh 0 0;min-height:2px}
+#tv .hours i.now{background:#e5192b}
+#tv .goal .bar{height:2.2vh;background:#1c1c21;border-radius:99px;overflow:hidden;margin:1vh 0 .6vh;position:relative}
+#tv .goal .bar i{display:block;height:100%;background:linear-gradient(90deg,#e5192b,#ff5a64);border-radius:99px}
+#tv .goal .grow{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.4vh 1vw;font-size:2vh}
+#tv .goal .grow b{font-size:2.6vh;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif}
+#tv .tops{display:grid;gap:.9vh;margin-top:1.2vh}
+#tv .tops div{display:flex;justify-content:space-between;gap:1vw;font-size:2.1vh}
+#tv .tops div span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tv .tops div b{font-variant-numeric:tabular-nums}
+#tv .feed{display:flex;flex-direction:column;gap:.8vh;overflow:hidden;min-height:0}
+#tv .feed .o{display:flex;justify-content:space-between;gap:1vw;align-items:baseline;font-size:2.1vh;padding:.9vh 1vw;border-radius:1.2vh;background:#141418}
+#tv .feed .o.new{animation:tvnew 2.4s ease-out}
+@keyframes tvnew{0%{background:#e5192b;transform:translateX(-2vw)}25%{transform:none}100%{background:#141418}}
+#tv .feed .o span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tv .feed .o small{color:#9a9aa6;font-size:1.6vh;white-space:nowrap}
+#tv .feed .o b{font-variant-numeric:tabular-nums;white-space:nowrap}
+#tv .tick{overflow:hidden;white-space:nowrap;font-size:2vh;color:#c3c3cc;border-top:1px solid #1c1c21;padding-top:1vh}
+#tv .tick div{display:inline-block;padding-left:100%;animation:tvtick 60s linear infinite}
+@keyframes tvtick{to{transform:translateX(-100%)}}
+#tv .err{color:#ff8a80;font-size:1.8vh;margin:0}
+#tv .pop{position:absolute;left:50%;top:8%;transform:translateX(-50%);background:#e5192b;color:#fff;font-weight:700;font-size:3.4vh;border-radius:2vh;padding:1.4vh 2.4vw;box-shadow:0 2vh 6vh rgba(0,0,0,.5);animation:tvpop 3.2s ease-out forwards;max-width:90%;text-align:center}
+@keyframes tvpop{0%{opacity:0;transform:translate(-50%,-2vh) scale(.9)}10%{opacity:1;transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#tv .onair.on,#tv .feed .o.new,#tv .tick div,#tv .pop{animation:none}}
 </style>
 </head>
 <body>
@@ -392,6 +441,7 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
   <button class="linkbtn" id="clockBtn">Clock</button>
   <button class="linkbtn" id="askBtn" hidden>Ask</button>
   <button class="linkbtn" id="liveBtn" hidden>Live</button>
+  <button class="linkbtn" id="tvBtn" hidden>TV</button>
   <button class="linkbtn" id="exportBtn" hidden>Export</button>
 </header>
 <div class="banner" id="banner"></div>
@@ -4141,6 +4191,7 @@ let rzT = null, lastDesk = isDesk();
 window.addEventListener('resize', ()=>{ clearTimeout(rzT); rzT = setTimeout(()=>{ if (isDesk()!==lastDesk && state.tab==='inventory' && !document.querySelector('.backdrop')){ lastDesk = isDesk(); renderTab(); return; } if (state.tab==='home' || isDesk()!==lastDesk){ lastDesk = isDesk(); if (host && !document.querySelector('.backdrop')) renderList(); } }, 200); });
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click', ()=>{ state.tab = b.dataset.tab; renderTab(); window.scrollTo(0,0); }));
 $('#exportBtn').addEventListener('click', openExport);
+$('#tvBtn').addEventListener('click', ()=>openTV());
 $('#askBtn').addEventListener('click', ()=>openAsk());
 $('#clockBtn').addEventListener('click', openClock);
 $('#liveBtn').addEventListener('click', openLive);
@@ -4452,6 +4503,159 @@ function openLive(){
   const old = L.refresh; L.refresh = ()=>{ drawCtl(); old(); };
 }
 
+/* ---------- TV dashboard ---------- */
+// A full-screen page for a TV in the warehouse: the TikTok LIVE (shared from another browser tab, since
+// TikTok can't be embedded), today's TikTok orders as they come in with a chime, top products, orders by
+// hour, the sales goal and today's Stockroom invoices. "Today" is TikTok's day (Pacific time), the same as
+// Seller Center's Data Analysis.
+function ptNow(){
+  const n = Date.now(), f = new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+  const p = Object.fromEntries(f.formatToParts(n).map(x=>[x.type, x.value]));
+  const asUtc = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second), off = asUtc - Math.floor(n/1000)*1000;
+  return {start:Date.UTC(+p.year, +p.month-1, +p.day) - off, hour:+p.hour, off};
+}
+function openTV(){
+  if ($('#tv')) return;
+  const T = {orders:new Map(), loaded:false, stream:null, sound:true, audio:null, timers:[], last:0, day:ptNow().start, err:'', goal:null, wake:null};
+  try { T.sound = localStorage.getItem('ss_tvsound')!=='0'; } catch(e){}
+  const pollMs = (()=>{ try { return Math.max(2000, +localStorage.getItem('ss_tvpoll') || 20000); } catch(e){ return 20000; } })();
+  const onair = h('span',{class:'onair'},'LIVE');
+  const clock = h('span',{class:'clock'});
+  const soundBtn = h('button',{type:'button'}, T.sound ? 'Sound on' : 'Sound off');
+  const liveBtn = h('button',{type:'button'}, 'Show our live');
+  const exitBtn = h('button',{type:'button'}, 'Exit TV');
+  const video = h('video',{autoplay:true, muted:true, playsinline:true, hidden:true});
+  const ph = h('div',{class:'ph'},
+    h('h2',{style:"font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:4vh;margin:0"},'Show your TikTok LIVE here'),
+    h('p',{},'Open your LIVE in another Chrome tab on this Mac, then press the button and pick that tab.'),
+    h('button',{class:'bigbtn',type:'button',onclick:()=>shareLive()},'Show our live'));
+  const liveBox = h('div',{class:'tvlive'}, video, ph);
+  const todayBig = h('b',{},'–'), todaySub = h('span',{},'Loading today’s TikTok orders…'), hours = h('div',{class:'hours','aria-hidden':'true'});
+  const tvErr = h('p',{class:'err',hidden:true});
+  const todayCard = h('div',{class:'card today'}, h('div',{class:'lbl'},'TikTok sales today'), todayBig, todaySub, hours, tvErr);
+  const goalCard = h('div',{class:'card goal'}, h('div',{class:'lbl'},'Sales goal'), h('p',{style:'margin:1vh 0 0;color:#9a9aa6;font-size:1.8vh'},'Loading…'));
+  const tops = h('div',{class:'tops'});
+  const topCard = h('div',{class:'card'}, h('div',{class:'lbl'},'Top products today'), tops);
+  const feed = h('div',{class:'feed'});
+  const feedCard = h('div',{class:'card',style:'display:flex;flex-direction:column;min-height:0'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Latest orders'), feed);
+  const tickInner = h('div',{}); const tick = h('div',{class:'tick'}, tickInner);
+  const root = h('div',{id:'tv',role:'dialog','aria-label':'TV dashboard'},
+    h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl'}, liveBtn, soundBtn, exitBtn), clock),
+    h('div',{class:'tvmain'}, liveBox, h('div',{class:'side'}, todayCard, goalCard, topCard), feedCard),
+    tick);
+  document.body.append(root); document.body.classList.add('locked');
+  try { root.requestFullscreen && root.requestFullscreen().catch(()=>{}); } catch(e){}
+  try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w=>{ T.wake = w; }).catch(()=>{}); } catch(e){}
+  // Sound needs a click first; the click that opened TV mode counts.
+  try { T.audio = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+
+  function chime(big){
+    if (!T.sound || !T.audio) return;
+    const a = T.audio, t0 = a.currentTime;
+    (big ? [660, 880, 1320] : [880, 1320]).forEach((f,i)=>{
+      const o = a.createOscillator(), g = a.createGain(); o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0+i*0.12); g.gain.exponentialRampToValueAtTime(0.25, t0+i*0.12+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0+i*0.12+0.5);
+      o.connect(g).connect(a.destination); o.start(t0+i*0.12); o.stop(t0+i*0.12+0.55);
+    });
+  }
+  function pop(text){ const p = h('div',{class:'pop'}, text); liveBox.append(p); setTimeout(()=>p.remove(), 3300); }
+  async function shareLive(){
+    try {
+      const s = await navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser', frameRate:30}, audio:false, selfBrowserSurface:'exclude'});
+      if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
+      T.stream = s; video.srcObject = s; video.hidden = false; ph.hidden = true; onair.classList.add('on'); liveBtn.textContent = 'Change live tab';
+      s.getVideoTracks()[0].addEventListener('ended', ()=>{ video.hidden = true; ph.hidden = false; onair.classList.remove('on'); liveBtn.textContent = 'Show our live'; T.stream = null; });
+      video.play().catch(()=>{});
+    } catch(e){ if (e && e.name!=='NotAllowedError' && e.name!=='AbortError') pop('Could not show the live: '+e.message); }
+  }
+  liveBtn.onclick = shareLive;
+  soundBtn.onclick = ()=>{ T.sound = !T.sound; soundBtn.textContent = T.sound ? 'Sound on' : 'Sound off'; try { localStorage.setItem('ss_tvsound', T.sound ? '1' : '0'); } catch(e){} if (T.sound) chime(); };
+  function close(){
+    T.timers.forEach(clearInterval); if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
+    try { if (T.audio) T.audio.close(); } catch(e){} try { if (T.wake) T.wake.release(); } catch(e){}
+    try { if (document.fullscreenElement) document.exitFullscreen().catch(()=>{}); } catch(e){}
+    document.removeEventListener('keydown', onKey); root.remove(); document.body.classList.remove('locked');
+  }
+  exitBtn.onclick = close;
+  const onKey = e=>{ if (e.key==='Escape' && !document.fullscreenElement) close(); };
+  document.addEventListener('keydown', onKey);
+  // Hide the buttons and the pointer when nobody is touching the Mac.
+  let idleT = null; const wake = ()=>{ root.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(()=>root.classList.add('idle'), 4000); };
+  root.addEventListener('mousemove', wake); wake();
+
+  const counts = o => o.status!=='UNPAID' && o.status!=='CANCELLED';
+  function draw(fresh){
+    const now = Date.now(), list = [...T.orders.values()].filter(o=>o.t*1000>=T.day).sort((a,b)=>b.t-a.t), live = list.filter(counts);
+    const gmv = round2(live.reduce((a,o)=>a+o.gmv,0)), items = live.reduce((a,o)=>a+o.items.length,0);
+    if (T.loaded){ todayBig.textContent = money(gmv); todaySub.textContent = fmtN(live.length)+' orders · '+fmtN(items)+' items · Pacific time, like Seller Center'; }
+    const byHour = Array(24).fill(0); live.forEach(o=>{ const hr = Math.floor((o.t*1000 - T.day)/3600000); if (hr>=0 && hr<24) byHour[hr] += o.gmv; });
+    const mx = Math.max(1, ...byHour), cur = ptNow().hour;
+    hours.replaceChildren(...byHour.map((v,i)=>h('i',{class:i===cur ? 'now' : '',style:'height:'+Math.max(2, Math.round(v/mx*100))+'%',title:i+':00 '+money(round2(v))})));
+    const prod = new Map(); live.forEach(o=>o.items.forEach(l=>{ const k = l.name || 'Item'; const e = prod.get(k) || {n:0, v:0}; e.n++; e.v += l.price; prod.set(k, e); }));
+    const top = [...prod.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,5);
+    tops.replaceChildren(...(top.length ? top.map(([k,e],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(e.n)+' · '+shortMoney(round2(e.v))))) : [h('div',{style:'color:#9a9aa6'}, T.loaded ? 'No orders yet today.' : 'Loading…')]));
+    const ago = t=>{ const s = Math.max(0, Math.round((now - t*1000)/1000)); return s<60 ? s+'s ago' : s<3600 ? Math.round(s/60)+'m ago' : Math.round(s/3600)+'h ago'; };
+    feed.replaceChildren(...live.slice(0,16).map(o=>{
+      const names = o.items.map(l=>l.name); const first = names[0] || 'Order';
+      return h('div',{class:'o'+(fresh && fresh.has(o.id) ? ' new' : '')}, h('span',{}, first+(names.length>1 ? ' +'+(names.length-1)+' more' : '')), h('small',{}, ago(o.t)), h('b',{}, money(round2(o.gmv))));
+    }));
+    // Today's Stockroom invoices along the bottom.
+    const d0 = new Date(); d0.setHours(0,0,0,0);
+    const inv = new Map(); state.sales.filter(s=>Date.parse(s.at)>=d0.getTime()).forEach(s=>{ const k = invKey(s); const e = inv.get(k) || {no:invNumber(k), name:s.customerName||'', total:0}; e.total += s.total||0; inv.set(k, e); });
+    const invs = [...inv.values()], invTotal = round2(invs.reduce((a,v)=>a+v.total,0));
+    const msg = (invs.length ? 'Stockroom invoices today: '+money(invTotal)+'   •   '+invs.map(v=>v.no+' '+v.name+' '+money(round2(v.total))).join('   •   ') : 'No Stockroom invoices yet today')
+      + (top.length ? '   •   Best seller today: '+top[0][0]+' ('+fmtN(top[0][1].n)+' sold)' : '');
+    if (tickInner.textContent!==msg) tickInner.textContent = msg;
+  }
+  function drawGoal(){
+    if (!T.goal){ return; }
+    const g = ttGoal(), st = ttGoalStats(g, T.goal);
+    goalCard.replaceChildren(h('div',{class:'lbl'}, g.title),
+      h('div',{class:'bar'}, h('i',{style:'width:'+(Math.min(1, st.pct)*100).toFixed(2)+'%'})),
+      h('div',{class:'grow'}, h('span',{}, h('b',{}, shortMoney(st.sold)), ' of '+shortMoney(st.goal)+' · '+(Math.round(st.pct*1000)/10)+'%'), h('span',{}, st.daysLeft+' days left · '+shortMoney(round2(st.needed))+'/day needed')),
+      h('p',{style:'margin:.6vh 0 0;color:#9a9aa6;font-size:1.5vh'},'Settled TikTok net sales; the last few days fill in as TikTok settles orders.'));
+  }
+  const clockTick = ()=>{ clock.textContent = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); };
+  clockTick(); T.timers.push(setInterval(clockTick, 5000));
+  T.timers.push(setInterval(()=>{ if (T.loaded) draw(); }, 15000));   // keeps "12s ago" and the invoices fresh
+
+  window.claude.use('tiktok').then(async tt=>{
+    let st = null; try { st = await tt.status(); } catch(e){}
+    if (!st || !st.enabled || !st.connected){ todaySub.textContent = 'Connect TikTok Shop in Reports to show TikTok orders here.'; T.loaded = true; draw(); return; }
+    const g = ttGoal();
+    const loadGoal = ()=>tt.dailySales(utcOf(g.start), utcOf(g.end)+DAY).then(d=>{ T.goal = d; drawGoal(); }).catch(()=>{});
+    loadGoal(); T.timers.push(setInterval(loadGoal, 600000));
+    const pull = async (since, initial)=>{
+      let token = '', fresh = new Set(), guard = 0;
+      do {
+        const r = await tt.orders(since, token);
+        for (const o of r.orders){ if (!T.orders.has(o.id)){ if (!initial) fresh.add(o.id); } T.orders.set(o.id, o); T.last = Math.max(T.last, o.t); }
+        token = r.next_page_token || '';
+        if (initial){ T.loaded = true; draw(); }   // show the total climbing while it loads
+      } while (token && ++guard < 100);
+      return fresh;
+    };
+    const tickOrders = async ()=>{
+      const day = ptNow().start;
+      if (day!==T.day){ T.day = day; T.orders.clear(); T.last = 0; }
+      try {
+        const fresh = await pull(T.last ? Math.max(T.day, T.last*1000 - 180000) : T.day, !T.loaded);
+        tvErr.hidden = true;
+        const nf = [...fresh].map(id=>T.orders.get(id)).filter(o=>o && counts(o));
+        if (nf.length){
+          const total = round2(nf.reduce((a,o)=>a+o.gmv,0));
+          chime(total>=100);
+          pop(nf.length===1 ? 'New order · '+(nf[0].items[0] ? nf[0].items[0].name : 'TikTok')+' · '+money(round2(nf[0].gmv)) : nf.length+' new orders · '+money(total));
+        }
+        T.loaded = true; draw(new Set(nf.map(o=>o.id)));
+      } catch(e){ tvErr.textContent = e.message; tvErr.hidden = false; if (!T.loaded){ todaySub.textContent = 'TikTok orders are not available.'; } }
+    };
+    await tickOrders();
+    T.timers.push(setInterval(()=>{ if (!document.hidden || T.stream) tickOrders(); }, pollMs));
+  }).catch(()=>{ T.loaded = true; draw(); });
+  draw();
+}
+
 /* ---------- start ---------- */
 renderStatus(); renderTab();
 
@@ -4462,6 +4666,7 @@ renderStatus(); renderTab();
     state.dl = dl; state.assets = assets; state.sample = sample || null;
     try { state.isAdmin = user ? ((await user.isOwner()) || (await user.canEdit())) : true; } catch(e){ state.isAdmin = true; }
     if (dl && state.isAdmin) $('#exportBtn').hidden = false;
+    if (state.isAdmin) $('#tvBtn').hidden = false;
     if (state.sample && state.isAdmin) $('#askBtn').hidden = false;
     if (state.sample && state.isAdmin) $('#liveBtn').hidden = false;
     renderStatus(); renderTab();

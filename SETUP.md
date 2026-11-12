@@ -138,6 +138,34 @@ Only owners and admins can see it, and only in companies where support has switc
 
 The TikTok tokens are kept in a table that only the server function can read. Disconnecting removes them, and finance data already pulled stays.
 
+### TV dashboard
+
+The **TV** button at the top of Stockroom (owners and admins) opens a full-screen dashboard for a TV:
+
+- today's TikTok sales, orders and items, counted on TikTok's day (Pacific time) like Seller Center's Data Analysis
+- each new order popping up with a chime
+- best sellers, sales by hour, the sales goal, and today's Stockroom invoices along the bottom
+
+It checks TikTok for new orders every 20 seconds. Move the mouse to show the buttons; they hide again after a few seconds.
+
+**Your TikTok LIVE on the TV.** TikTok doesn't let other sites embed a LIVE, so the dashboard shows it by sharing a browser tab. On the Mac connected to the TV:
+
+1. In Chrome, open your LIVE in one tab.
+2. Open Stockroom in another tab and click **TV**.
+3. Click **Show our live** and pick the LIVE tab.
+
+The LIVE tab plays its own sound, so the dashboard stays silent apart from the order chime (**Sound on/off**).
+
+**Live orders need TikTok's Order permission (once).**
+
+1. In TikTok Shop Partner Center, open the Stockroom app.
+2. Add the **Order** permission (order information, read), and save.
+3. If TikTok asks, submit the change for review.
+4. In Stockroom, go to **Reports → TikTok Shop**, disconnect, then **Connect TikTok Shop** again, so the connection includes the new permission.
+5. Deploy the latest [`supabase/functions/tiktok/index.ts`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/functions/tiktok/index.ts) to the `tiktok` function. No database change is needed.
+
+Until then, the TV shows the error TikTok gives, and everything else still works.
+
 ## The domain (stockroominc.com)
 
 These steps are already done. They're here in case the domain ever needs setting up again.

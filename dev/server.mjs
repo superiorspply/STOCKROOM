@@ -257,7 +257,13 @@ async function mockClaude(req, res, url){
 // A stand-in TikTok Shop: an authorize page that sends you straight back with a code, token endpoints,
 // and signed finance endpoints. Statement transactions only answer on 202309, so the function's
 // fallback from newer versions is exercised.
-const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[]};
+const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[], orders:[]};
+// Live orders for the TV dashboard: 150 placed over the last quarter hour (so the dashboard pages through them),
+// plus any a test adds with POST /mock-tiktok/add-order.
+const mockOrder = (n, t, name, price) => ({id:'57700' + n, status:'AWAITING_SHIPMENT', create_time:t,
+  payment:{currency:'USD', original_total_product_price:String(price), sub_total:String(price), total_amount:String(price + 3)},
+  line_items:[{id:'L' + n, product_name:name, sku_name:'Default', sale_price:String(price), sku_image:''}]});
+for (let i = 0; i < 150; i++) TT.orders.push(mockOrder(1000 + i, Math.floor(Date.now() / 1000) - 30 - i * 5, i % 3 ? 'Squishy Butter' : 'Cloud Slime', i % 3 ? 10 : 15));
 export const MOCK_TIKTOK = {
 // Shaped like TikTok's: top-level totals add up to the payout; the breakdowns are their detail; supplementary
 // components repeat amounts for reference. TikTok holds $5 of T1 in reserve: its line counts that, S1's total
@@ -280,12 +286,19 @@ async function mockTikTok(req, res, url){
     return send(res, 200, {code:0, message:'success', data:{access_token:'TTACCESS', access_token_expire_in:now + 7 * 86400, refresh_token:'TTREFRESH', refresh_token_expire_in:now + 365 * 86400, seller_name:'Mock Seller'}});
   }
   const path = p.replace('/api', '');
+  const raw = req.method === 'POST' ? (await readBody(req)).toString() : '';
   const signed = Object.keys(q).filter(k => k !== 'sign' && k !== 'access_token').sort().map(k => k + q[k]).join('');
-  const want = crypto.createHmac('sha256', TT.secret).update(TT.secret + path + signed + TT.secret).digest('hex');
+  const want = crypto.createHmac('sha256', TT.secret).update(TT.secret + path + signed + raw + TT.secret).digest('hex');
   if (q.sign !== want || q.app_key !== TT.key) return send(res, 200, {code:106001, message:'invalid sign'});
   if (req.headers['x-tts-access-token'] !== 'TTACCESS') return send(res, 200, {code:105002, message:'invalid access token'});
   if (path === '/authorization/202309/shops') return send(res, 200, {code:0, data:{shops:[{id:'7001', name:'Mock TikTok Shop', cipher:'CIPHER1', region:'US'}]}});
   if (q.shop_cipher !== 'CIPHER1') return send(res, 200, {code:106011, message:'shop_cipher missing'});
+  if (path === '/order/202309/orders/search'){
+    const b = JSON.parse(raw || '{}'), size = Math.min(100, +q.page_size || 20), from = +(q.page_token || 0);
+    const list = TT.orders.filter(o => o.create_time >= (b.create_time_ge || 0)).sort((x, y) => y.create_time - x.create_time);
+    const page = list.slice(from, from + size);
+    return send(res, 200, {code:0, data:{orders:page, total_count:list.length, next_page_token:from + size < list.length ? String(from + size) : ''}});
+  }
   if (path === '/finance/202309/statements') return send(res, 200, {code:0, data:{statements:MOCK_TIKTOK.statements, next_page_token:''}});
   const st = /^\/finance\/202309\/statements\/(\w+)\/statement_transactions$/.exec(path);
   if (st) return send(res, 200, {code:0, data:{transactions:st[1] === 'S1' ? MOCK_TIKTOK.transactions : [], next_page_token:''}});
@@ -335,6 +348,7 @@ const api = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/functions/v1/')) return await functions(req, res, url);
     if (url.pathname.startsWith('/mock-anthropic')) return await mockClaude(req, res, url);
     if (url.pathname === '/mock-tiktok/calls') return send(res, 200, TT.calls);
+    if (url.pathname === '/mock-tiktok/add-order'){ const b = JSON.parse((await readBody(req)).toString() || '{}'); if (b.reset){ TT.orders.splice(150); return send(res, 200, {ok:true}); } TT.orders.push(mockOrder(5000 + TT.orders.length, Math.floor(Date.now() / 1000), b.name || 'Squishy Butter', b.price || 12)); return send(res, 200, {ok:true}); }
     if (url.pathname.startsWith('/mock-tiktok')) return await mockTikTok(req, res, url);
     send(res, 404, {message:'not found'});
   } catch(e){ console.error(e); send(res, 500, {message:String(e.message || e)}); }

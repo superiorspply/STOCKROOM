@@ -31,14 +31,17 @@ async function hmac(secret: string, text: string) {
 }
 
 // TikTok's request signature: secret + path + sorted key/value pairs (+ body) + secret, HMAC-SHA256 with the secret.
-async function tiktok(path: string, link: { access_token: string; shop_cipher?: string }, params: Record<string, string | number> = {}) {
+// With a body the call is a POST and the JSON body is part of the signature.
+async function tiktok(path: string, link: { access_token: string; shop_cipher?: string }, params: Record<string, string | number> = {}, body?: unknown) {
   const q: Record<string, string> = { app_key: env("TIKTOK_APP_KEY"), timestamp: String(Math.floor(Date.now() / 1000)) };
   if (link.shop_cipher && !path.startsWith("/authorization/")) q.shop_cipher = link.shop_cipher;
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q[k] = String(v);
   const base = Object.keys(q).sort().map((k) => k + q[k]).join("");
   const secret = env("TIKTOK_APP_SECRET");
-  q.sign = await hmac(secret, secret + path + base + secret);
+  const json = body === undefined ? "" : JSON.stringify(body);
+  q.sign = await hmac(secret, secret + path + base + json + secret);
   const r = await fetch(API() + path + "?" + new URLSearchParams(q), {
+    method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : json,
     headers: { "x-tts-access-token": link.access_token, "content-type": "application/json" },
   });
   const j = await r.json().catch(() => ({}));
@@ -69,7 +72,7 @@ async function tokenCall(kind: "get" | "refresh", value: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return reply(405, { error: "Use POST" });
-  let body: { action?: string; company_id?: string; code?: string; state?: string };
+  let body: { action?: string; company_id?: string; code?: string; state?: string; since?: number; page_token?: string };
   try { body = await req.json(); } catch { return reply(400, { error: "Send JSON" }); }
   if (!env("TIKTOK_APP_KEY") || !env("TIKTOK_APP_SECRET")) return reply(500, { error: "TikTok Shop is not set up yet (missing app key or secret)." });
 
@@ -122,6 +125,44 @@ Deno.serve(async (req) => {
         throw e;
       }
     }
+    // Live orders for the TV dashboard: orders placed since `since` (unix seconds), newest first, a page of
+    // up to 100 at a time for as many pages as fit in a few seconds. Needs the Order permission on the
+    // TikTok app (the shop reconnects after it is added). Only what the dashboard shows is returned.
+    if (body.action === "orders") {
+      const cid = body.company_id;
+      const st = await rpc("tiktok_status", { cid });   // owners and admins only
+      if (st?.[0]?.enabled === false) return reply(403, { error: "TikTok Shop is not turned on for this company." });
+      const { data: link } = await admin.from("tiktok_links").select("*").eq("company_id", cid).maybeSingle();
+      if (!link) return reply(400, { error: "TikTok Shop is not connected." });
+      await freshToken(admin, link);
+      const since = Math.max(0, Math.floor(Number(body.since) || 0));
+      const orders: Record<string, unknown>[] = [];
+      let token = String(body.page_token || ""), pages = 0;
+      const started = Date.now();
+      try {
+        do {
+          const d = await tiktok("/order/202309/orders/search", link,
+            { page_size: 100, sort_field: "create_time", sort_order: "DESC", page_token: token }, { create_time_ge: since });
+          // deno-lint-ignore no-explicit-any
+          for (const o of (d.orders || []) as any[]) {
+            const p = o.payment || {};
+            // deno-lint-ignore no-explicit-any
+            const items = ((o.line_items || []) as any[]).map((l) => ({ name: String(l.product_name || ""), sku: String(l.sku_name || ""), price: Number(l.sale_price) || 0, image: String(l.sku_image || "") }));
+            orders.push({ id: String(o.id), t: Number(o.create_time) || 0, status: String(o.status || ""),
+              gmv: Number(p.original_total_product_price ?? p.sub_total) || items.reduce((a, l) => a + l.price, 0),
+              paid: Number(p.total_amount) || 0, items });
+          }
+          token = String(d.next_page_token || ""); pages++;
+        } while (token && pages < 20 && Date.now() - started < 8000);
+      } catch (e) {
+        const m = String((e as Error).message);
+        if (/scope|permission|authori[sz]|not allowed|access denied/i.test(m))
+          throw new Fail(403, "TikTok has not given Stockroom access to orders yet. Add the Order permission to the app in TikTok Partner Center, then disconnect and connect TikTok Shop again. (" + m + ")");
+        throw e;
+      }
+      return reply(200, { orders, next_page_token: token });
+    }
+
     // The hourly job (supabase/setup/tiktok_auto_sync.sql): every connected company that has TikTok Shop on is
     // synced and its new lines added into the totals, so the page is up to date when it opens.
     if (body.action === "auto") {
@@ -167,9 +208,9 @@ async function sync(admin: any, link: any) {
   finally { if (!error) await admin.rpc("tiktok_sync_end", { cid: link.company_id }); }
 }
 
+// Refreshes the access token when it has less than a day left.
 // deno-lint-ignore no-explicit-any
-async function syncNow(admin: any, link: any) {
-  const started = Date.now();
+async function freshToken(admin: any, link: any) {
   if (!link.access_expires || new Date(link.access_expires).getTime() < Date.now() + 86_400_000) {
     if (link.refresh_expires && new Date(link.refresh_expires).getTime() < Date.now()) {
       throw new Fail(401, "The TikTok connection has expired. Disconnect and connect TikTok Shop again.");
@@ -179,6 +220,12 @@ async function syncNow(admin: any, link: any) {
       access_token: link.access_token, access_expires: link.access_expires, refresh_token: link.refresh_token, refresh_expires: link.refresh_expires,
     }).eq("company_id", link.company_id);
   }
+}
+
+// deno-lint-ignore no-explicit-any
+async function syncNow(admin: any, link: any) {
+  const started = Date.now();
+  await freshToken(admin, link);
   // From a few days before the newest statement already pulled (statements can change until paid), or 90 days back.
   const { data: last } = await admin.from("tiktok_statements").select("statement_time").eq("company_id", link.company_id)
     .order("statement_time", { ascending: false }).limit(1).maybeSingle();

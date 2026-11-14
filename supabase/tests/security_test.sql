@@ -302,6 +302,7 @@ insert into public.tiktok_city_days(company_id, day, orders) select v::uuid, cur
 set role authenticated;
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 select t.ok((select (r->'products'->0->>'units')::int = 40 and (r->>'days_filled')::int = 1 and (r->>'orders')::int = 38 from public.tiktok_city((select v::uuid from ids where k='A'), current_date - 7, current_date) r), 'owners can load the city''s product totals');
+select t.ok((select (r->'products'->0->>'first_day')::date = current_date and (r->'products'->0->>'last_day')::date = current_date and (r->>'filled_from')::date = current_date from public.tiktok_city((select v::uuid from ids where k='A'), current_date - 7, current_date) r), 'the city knows each product''s first and last day with sales');
 select t.fails($$insert into public.tiktok_product_days(company_id, day, product) select v::uuid, current_date, 'X' from ids where k = 'A'$$, 'city totals cannot be written from the app');
 select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
 select t.fails($$select public.tiktok_city((select v::uuid from ids where k='A'), current_date - 7, current_date)$$, 'another company cannot load A''s city');

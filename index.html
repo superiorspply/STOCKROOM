@@ -510,9 +510,11 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .say{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);background:rgba(5,5,6,.85);border:1px solid #27272e;color:#fff;font-size:2.4vh;padding:1vh 2vw;border-radius:99px;z-index:6;max-width:80%;text-align:center;animation:tvpop2 .3s ease-out}
 #tv .tvcity{grid-column:1/-1;position:relative;border-radius:2vh;overflow:hidden;background:#04050a;border:1px solid #1c1c21;min-height:0}
 #tv .tvcity canvas{position:absolute;inset:0;display:block;width:100%!important;height:100%!important;cursor:grab}
-#tv .tvcity .hud{position:absolute;left:2vw;top:2vh;pointer-events:none;text-shadow:0 .3vh 1.6vh rgba(0,0,0,.8)}
+#tv .tvcity .hud{position:absolute;left:1.2vw;top:1.4vh;padding:1.2vh 1.4vw 1.6vh;border-radius:1.6vh;background:rgba(5,5,10,.42);pointer-events:none;text-shadow:0 .3vh 1.6vh rgba(0,0,0,.8)}
 #tv .tvcity .hud h3{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:6vh;letter-spacing:-.02em;line-height:1}
 #tv .tvcity .hud p{margin:.8vh 0 0;font-size:2.2vh;color:#c3c3cc}
+#tv .tvcity .hud p.wx{font-size:1.8vh;color:#ffd68a}
+#tv .tvcity .cctl .cvid{background:#e5192b;color:#fff;border-color:#e5192b;font-weight:700}
 #tv .tvcity .hud .dist{display:flex;gap:2vw;margin-top:1.4vh;font-size:1.9vh;color:#c3c3cc}
 #tv .tvcity .hud .dist i{display:inline-block;width:1.2vh;height:1.2vh;border-radius:.3vh;margin-right:.5vw;vertical-align:middle}
 #tv .tvcity .cctl{position:absolute;right:2vw;top:2vh;display:flex;gap:.6vw;transition:opacity .4s}
@@ -5056,6 +5058,39 @@ function tvHome(){
   const p = m && G && G.z3[m[1].slice(0,3)];
   return p ? {lat:p[0], lng:p[1], name:'Warehouse'} : TV_HOME;
 }
+// Shared by the TV's films (today's video on the map, the City video): the music, made on the spot with Web
+// Audio (a slow four-chord pad over a soft pulse, building, then resolving), the recorder on the film's
+// canvas, and saving the file. H.264 MP4 plays everywhere (QuickTime, iPhone, TikTok, Instagram) and Chrome
+// on a Mac records it; otherwise WebM.
+function tvFilm(out, LEN){
+  const ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination();
+  const master = ac.createGain(); master.gain.value = 0.5; master.connect(dest); master.connect(ac.destination);
+  const t0 = ac.currentTime + 0.1, beat = 60/96, chords = [[220,261.6,329.6],[174.6,220,261.6],[261.6,329.6,392],[196,246.9,293.7]];
+  for (let bar=0; bar*4*beat < LEN; bar++){
+    const tb = t0 + bar*4*beat, ch = chords[bar % 4], build = Math.min(1, (bar*4*beat)/(LEN*0.7));
+    ch.forEach(f=>[f, f*2.003].forEach(ff=>{ const o = ac.createOscillator(), gn = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = ff;
+      lp.type = 'lowpass'; lp.frequency.value = 500 + 2200*build; gn.gain.setValueAtTime(0.0001, tb); gn.gain.exponentialRampToValueAtTime(0.05, tb + 0.6); gn.gain.exponentialRampToValueAtTime(0.0001, tb + 4*beat + 0.3);
+      o.connect(lp).connect(gn).connect(master); o.start(tb); o.stop(tb + 4*beat + 0.4); }));
+    for (let k=0;k<4;k++){ const tk = tb + k*beat; if (tk - t0 > LEN - 2) break; const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.setValueAtTime(110, tk); o.frequency.exponentialRampToValueAtTime(42, tk + 0.18);
+      gn.gain.setValueAtTime(0.0001, tk); gn.gain.exponentialRampToValueAtTime(0.35*(0.4 + build*0.6), tk + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, tk + 0.3); o.connect(gn).connect(master); o.start(tk); o.stop(tk + 0.32); }
+  }
+  const stream = out.captureStream(30); dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+  const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m)) || '';
+  const mr = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:8_000_000} : undefined), chunks = [];
+  mr.ondataavailable = e=>{ if (e.data && e.data.size) chunks.push(e.data); };
+  // Saves what was recorded as <brand>[-suffix]-<day>.mp4 (or .webm). A film stopped before anything was recorded saves nothing.
+  async function save(stopped, suffix){
+    try { ac.close(); } catch(e){}
+    if (stopped && !chunks.length) return;
+    const type = (mr.mimeType || mime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(chunks, {type});
+    const name = (BRAND()+(suffix ? '-'+suffix : '')+'-'+localDay(nowIso())).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.'+ext;
+    try { if (state.dl) await state.dl.save({filename:name, data:blob}); else throw new Error('no downloads'); }
+    catch(e){ if (!(e && e.code==='declined')){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); } }
+    toast('Saved '+name);
+  }
+  return {mr, save};
+}
 function tvMap(tt, T){
   const M = {orders:new Map(), last:0, day:ptNow().start, loaded:false, globe:null, rings:[], timer:null, err:''};
   const box = h('div',{class:'globe'}, h('div',{class:'gmsg'}, 'Loading the map…'));
@@ -5146,23 +5181,7 @@ function tvMap(tt, T){
       .pointOfView({lat:20, lng:-60, altitude:4.2});
     try { g.controls().enabled = false; } catch(e){}
     const gl = gbox.querySelector('canvas');
-    // Music: a slow four-chord pad over a soft pulse, building, then resolving. Made with Web Audio.
-    const ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination();
-    const master = ac.createGain(); master.gain.value = 0.5; master.connect(dest); master.connect(ac.destination);
-    const t0 = ac.currentTime + 0.1, beat = 60/96, chords = [[220,261.6,329.6],[174.6,220,261.6],[261.6,329.6,392],[196,246.9,293.7]];
-    for (let bar=0; bar*4*beat < LEN; bar++){
-      const tb = t0 + bar*4*beat, ch = chords[bar % 4], build = Math.min(1, (bar*4*beat)/(LEN*0.7));
-      ch.forEach(f=>[f, f*2.003].forEach(ff=>{ const o = ac.createOscillator(), gn = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = ff;
-        lp.type = 'lowpass'; lp.frequency.value = 500 + 2200*build; gn.gain.setValueAtTime(0.0001, tb); gn.gain.exponentialRampToValueAtTime(0.05, tb + 0.6); gn.gain.exponentialRampToValueAtTime(0.0001, tb + 4*beat + 0.3);
-        o.connect(lp).connect(gn).connect(master); o.start(tb); o.stop(tb + 4*beat + 0.4); }));
-      for (let k=0;k<4;k++){ const tk = tb + k*beat; if (tk - t0 > LEN - 2) break; const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.setValueAtTime(110, tk); o.frequency.exponentialRampToValueAtTime(42, tk + 0.18);
-        gn.gain.setValueAtTime(0.0001, tk); gn.gain.exponentialRampToValueAtTime(0.35*(0.4 + build*0.6), tk + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, tk + 0.3); o.connect(gn).connect(master); o.start(tk); o.stop(tk + 0.32); }
-    }
-    const stream = out.captureStream(30); dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
-    // H.264 MP4 plays everywhere (QuickTime, iPhone, TikTok, Instagram); Chrome on a Mac records it. Otherwise WebM.
-    const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m)) || '';
-    const mr = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:8_000_000} : undefined), chunks = [];
-    mr.ondataavailable = e=>{ if (e.data && e.data.size) chunks.push(e.data); };
+    const film = tvFilm(out, LEN), mr = film.mr;
     const day = new Date().toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
     const ease = x=>x<0 ? 0 : x>1 ? 1 : x*x*(3-2*x);
     const txt = (t, x, y, size, color, alpha, align, weight)=>{ cx.globalAlpha = Math.max(0, Math.min(1, alpha)); cx.fillStyle = color; cx.font = (weight||700)+' '+size+"px 'Bricolage Grotesque', system-ui, sans-serif"; cx.textAlign = align || 'left'; cx.fillText(t, x, y); cx.globalAlpha = 1; };
@@ -5213,16 +5232,9 @@ function tvMap(tt, T){
       if (mr.state !== 'inactive') mr.stop();
     }
     mr.onstop = async ()=>{
-      try { ac.close(); } catch(e){}
       try { g._destructor && g._destructor(); } catch(e){}
       stage.remove();
-      if (stopped && !chunks.length) return;
-      const type = (mr.mimeType || mime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
-      const blob = new Blob(chunks, {type});
-      const name = (BRAND()+'-'+localDay(nowIso())).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.'+ext;
-      try { if (state.dl) await state.dl.save({filename:name, data:blob}); else throw new Error('no downloads'); }
-      catch(e){ if (!(e && e.code==='declined')){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); } }
-      toast('Saved '+name);
+      await film.save(stopped, '');
     };
     stopBtn.onclick = ()=>{ stopped = true; };
     // Give the globe a moment to draw its texture, then roll.
@@ -5371,34 +5383,56 @@ function tvRace(T, talk){
   return {el, onOrders, paint, stop(){ clearInterval(timer); }};
 }
 
-// Squishy City: a night-time 3D city (three.js, loaded only when opened) where every product is a skyscraper
-// whose height is how many sold over the chosen days. Two districts: TikTok (units from tiktok_product_days,
-// filled by the tiktok function's "city" action) and Wholesale (Stockroom's own sales). Trucks drive out of a
-// building when it sells. Drag to look around; it flies on its own when left alone.
+// Squishy City: a 3D city (three.js, loaded only when opened) where every product is a skyscraper whose height
+// is how many sold over the chosen days. Two districts: TikTok (units from tiktok_product_days, filled by the
+// tiktok function's "city" action) and Wholesale (Stockroom's own sales). The sky follows the real time of day
+// at the warehouse; the bigger towers carry their product's billboard; a tower grows with each sale; new
+// products are construction sites and ones that stopped selling go dark; each order sends a truck towards the
+// buyer's state; sales set the weather (coin rain, fog, a spotlight, fireworks). Drag to look around, or let
+// the drone tour fly it; "Make the City video" records one lap of the tour with titles and music.
 function tvCity(T, tt){
-  const C = {days:30, tk:[], ws:[], three:null, raf:0, built:false, drag:null, idleAt:0, ang:0.6, trucks:[], bld:new Map(), msg:null};
+  const C = {days:30, tk:[], ws:[], three:null, raf:0, drag:null, idleAt:0, ang:0.6, cars:[], fx:[], bld:new Map(), orders:0, tour:false, tourAt:0, rec:null, wx:{fog:0, coinsUntil:0, spot:'', text:''}, sky:{day:0, glow:0}, hundreds:-1, bigDay:0};
   try { const d = +localStorage.getItem('ss_tvcitydays'); if ([7,30,90].includes(d)) C.days = d; } catch(e){}
-  const title = h('h3',{}), sub = h('p',{}), dist = h('div',{class:'dist'}, h('span',{}, h('i',{style:'background:#ff3b4a'}), 'TikTok district'), h('span',{}, h('i',{style:'background:#36c5f0'}), 'Wholesale district'));
+  const title = h('h3',{}), sub = h('p',{}), wxEl = h('p',{class:'wx'}), dist = h('div',{class:'dist'}, h('span',{}, h('i',{style:'background:#ff3b4a'}), 'TikTok district'), h('span',{}, h('i',{style:'background:#36c5f0'}), 'Wholesale district'));
   const msg = h('div',{class:'cmsg',hidden:true});
   const dayBtns = [7,30,90].map(d=>h('button',{type:'button','aria-pressed':String(C.days===d),onclick:()=>{ C.days = d; try { localStorage.setItem('ss_tvcitydays', String(d)); } catch(e){} dayBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String([7,30,90][i]===d))); load(); }}, d+' days'));
-  const el = h('div',{class:'tvcity'}, h('div',{class:'hud'}, title, sub, dist), h('div',{class:'cctl'}, ...dayBtns), msg);
+  const tourBtn = h('button',{type:'button','aria-pressed':'false',onclick:()=>setTour(!C.tour)}, 'Drone tour');
+  const vidBtn = h('button',{type:'button',class:'cvid',onclick:()=>makeVideo()}, '🎬 Make the City video');
+  const el = h('div',{class:'tvcity'}, h('div',{class:'hud'}, title, sub, wxEl, dist), h('div',{class:'cctl'}, ...dayBtns, tourBtn, vidBtn), msg);
   el._city = C;   // for tests
   const say = t=>{ msg.textContent = t; msg.hidden = !t; };
+  const setTour = on=>{ C.tour = on; C.tourAt = performance.now(); tourBtn.setAttribute('aria-pressed', String(on)); el.dataset.tour = on ? '1' : ''; };
+  const forced = k=>{ try { return (localStorage.getItem('ss_tvcitywx')||'').split(',').includes(k); } catch(e){ return false; } };   // for tests and screenshots
+  const dayStr = ms=>new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(ms);
+  const daysApart = (a, b)=>Math.round((Date.parse(b+'T12:00:00Z') - Date.parse(a+'T12:00:00Z'))/DAY);
+  // New products (first sold in the last week, with earlier days on record to compare) are construction sites;
+  // ones with no sales lately are boarded up.
+  const quiet = ()=>Math.min(5, Math.ceil(C.days/2));
   const wholesale = ()=>{
-    const from = Date.now() - C.days*DAY, m = new Map();
-    for (const x of state.sales){ if (Date.parse(x.at) < from) continue; const k = x.name || 'Item'; const e = m.get(k) || {product:k, units:0, gmv:0}; e.units += x.qty||0; e.gmv += x.total||0; m.set(k, e); }
+    const from = Date.now() - C.days*DAY, m = new Map(), first = new Map(); let oldest = Infinity;
+    for (const x of state.sales){ const at = Date.parse(x.at), k = x.name || 'Item'; if (!(at > 0)) continue;
+      oldest = Math.min(oldest, at); first.set(k, Math.min(first.get(k) || Infinity, at));
+      if (at < from) continue; const e = m.get(k) || {product:k, units:0, gmv:0, last:0, itemId:x.itemId||''}; e.units += x.qty||0; e.gmv += x.total||0; e.last = Math.max(e.last, at); m.set(k, e); }
+    const now = Date.now();
+    for (const e of m.values()){ const f = first.get(e.product); e.isNew = now - f < 7*DAY && f - oldest > 3*DAY; e.stale = now - e.last > quiet()*DAY; e.quietDays = Math.floor((now - e.last)/DAY);
+      const it = e.itemId && state.items.find(i=>i.id===e.itemId); e.image = it && it.photoId ? photoSrc(it.photoId) : ''; }
     return [...m.values()].sort((a,b)=>b.units-a.units).slice(0, 36);
   };
+  const flagTk = (list, filledFrom)=>{ const today = dayStr(Date.now());
+    for (const p of list){ const f = p.first_day && String(p.first_day).slice(0,10), l = p.last_day && String(p.last_day).slice(0,10), ff = filledFrom && String(filledFrom).slice(0,10);
+      p.isNew = !!(f && ff && daysApart(f, today) <= 7 && daysApart(ff, f) >= 3);
+      p.quietDays = l ? daysApart(l, today) : 0; p.stale = !!l && p.quietDays >= quiet(); }
+    return list; };
   async function load(){
     C.ws = wholesale();
     if (tt){
       try {
         let r, guard = 0;
         if (!C.tk.length) say('Adding up '+C.days+' days of TikTok sales… the first time takes a minute or two');
-        do { r = await tt.city(C.days); C.tk = (r.products||[]).slice(0, 48); build();
+        do { r = await tt.city(C.days); C.tk = flagTk((r.products||[]).slice(0, 48), r.filled_from); build();
           if (r.missing > 0) say('Building the city… '+(C.days - r.missing)+' of '+C.days+' days of TikTok sales added up');
         } while (r.missing > 0 && ++guard < 60 && el.isConnected);
-        say(C.tk.length ? '' : 'TikTok shows no sales in the last '+C.days+' days.'); C.orders = r.orders || 0;
+        say(C.tk.length ? '' : 'TikTok shows no sales in the last '+C.days+' days.'); C.orders = +r.orders || 0;
       } catch(e){ say(e.message); }
     }
     build();
@@ -5416,22 +5450,42 @@ function tvCity(T, tt){
     x.fillStyle = color; x.fillRect(6, 6, 12, 148);
     x.fillStyle = '#ffffff'; x.font = '700 52px system-ui, sans-serif'; x.fillText(text.length > 18 ? text.slice(0,17)+'…' : text, 34, 74);
     x.fillStyle = '#c3c3cc'; x.font = '500 40px system-ui, sans-serif'; x.fillText(sub, 34, 128);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), depthTest:false, transparent:true}));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), depthTest:false, transparent:true, fog:false}));
     sp.scale.set(40, 12.5, 1); sp.renderOrder = 10; return sp;
   }
+  const subOf = p=>p.stale ? 'No sales in '+p.quietDays+' days' : (p.isNew ? 'NEW · ' : '')+fmtN(p.units)+' sold';
+  const hex = n=>'#'+n.toString(16).padStart(6,'0');
+  // A product's billboard: its name on its district's colour at first, then its photo when that loads (a photo
+  // the browser may not use in 3D keeps the name).
+  function billboardTex(THREE, p, glow){
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const strip = ()=>{ x.fillStyle = 'rgba(0,0,0,.62)'; x.fillRect(0, 196, 256, 60); x.fillStyle = '#fff'; x.font = '700 26px system-ui, sans-serif'; x.textAlign = 'center';
+      x.fillText(p.product.length > 17 ? p.product.slice(0,16)+'…' : p.product, 128, 235); x.strokeStyle = hex(glow); x.lineWidth = 10; x.strokeRect(5, 5, 246, 246); };
+    const g = x.createLinearGradient(0,0,256,256); g.addColorStop(0, hex(glow)); g.addColorStop(1, '#14151c'); x.fillStyle = g; x.fillRect(0,0,256,256);
+    x.fillStyle = 'rgba(255,255,255,.92)'; x.font = '800 44px system-ui, sans-serif'; x.textAlign = 'center';
+    const words = p.product.split(/\s+/), lines = []; let cur = '';
+    for (const w of words){ if ((cur+' '+w).trim().length > 10 && cur){ lines.push(cur); cur = w; } else cur = (cur+' '+w).trim(); } if (cur) lines.push(cur);
+    lines.slice(0,3).forEach((l,i)=>x.fillText(l.length > 11 ? l.slice(0,10)+'…' : l, 128, 80 + i*50));
+    strip();
+    const tex = new THREE.CanvasTexture(c);
+    if (p.image){ const im = new Image(); im.crossOrigin = 'anonymous';
+      im.onload = ()=>{ try { const s = Math.max(256/im.width, 256/im.height), w = im.width*s, hh = im.height*s; x.drawImage(im, (256-w)/2, (256-hh)/2, w, hh); strip(); x.getImageData(0,0,1,1); tex.needsUpdate = true; } catch(e){} };
+      im.src = p.image; }
+    return tex;
+  }
+  const heightFor = (units, max)=>4 + 86*Math.sqrt(Math.min(1.7, units/Math.max(1,max)));
   function build(){
     const K = C.three; if (!K) return;
-    const sig = C.days+'|'+C.tk.map(p=>p.product+p.units).join(',')+'|'+C.ws.map(p=>p.product+p.units).join(',');
+    const flags = p=>p.product+(p.isNew?'+':'')+(p.stale?'-':'');
+    const sig = C.days+'|'+C.tk.map(p=>flags(p)+p.units).join(',')+'|'+C.ws.map(p=>flags(p)+p.units).join(',');
     if (sig===C.sig) return; C.sig = sig;
-    // Same products as before, only new counts: update the numbers without rebuilding the city.
-    const names = C.days+'|'+C.tk.map(p=>p.product).join(',')+'|'+C.ws.map(p=>p.product).join(',');
+    // Same products as before, only new counts: update the numbers and heights without rebuilding the city.
+    const names = C.days+'|'+C.tk.map(flags).join(',')+'|'+C.ws.map(flags).join(',');
     if (names===C.names && C.bld.size){ for (const p of C.tk) relabel('tk', p); for (const p of C.ws) relabel('ws', p); hud(); return; }
     C.names = names;
-    const {THREE, scene, city} = K;
+    const {THREE, city} = K;
     while (city.children.length) city.remove(city.children[0]);
-    C.bld.clear();
-    const all = C.tk.length ? C.tk : [];
-    const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0);
+    C.bld.clear(); C.cars = C.cars.filter(c=>{ if (c.order) return false; return true; });
     const named = [...C.tk, ...C.ws].some(p=>/squish/i.test(p.product));
     title.textContent = named ? 'Squishy City' : BRAND()+' City';
     hud();
@@ -5442,58 +5496,232 @@ function tvCity(T, tt){
       for (let r=0; pos.length < list.length; r++) for (let i=-r;i<=r;i++) for (let j=-r;j<=r;j++) if (Math.max(Math.abs(i),Math.abs(j))===r && pos.length < list.length) pos.push([i,j]);
       const tex = windowTex(THREE, color);
       list.forEach((p,n)=>{
-        const hgt = 4 + 86*Math.sqrt(p.units/Math.max(1,max)), w = n < 3 ? 9 : 7;
+        const hgt = heightFor(p.units, max), w = n < 3 ? 9 : 7;
         const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(1, Math.max(1, Math.round(hgt/12)));
         const mat = new THREE.MeshStandardMaterial({color:0x151925, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.9, roughness:0.6, metalness:0.2});
         const g = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, w), mat);
-        const [i,j] = pos[n]; g.position.set(cx + i*13, hgt/2, j*13); g.scale.y = 0.01; g.userData = {h:hgt, grow:0.002 + Math.random()*0.004, base:hgt/2};
+        const [i,j] = pos[n]; g.position.set(cx + i*13, hgt/2, j*13); g.scale.y = 0.01; g.userData = {h:hgt, s:0.01, ts:1, grow:0.002 + Math.random()*0.004};
         city.add(g);
         const cap = new THREE.Mesh(new THREE.BoxGeometry(w*1.02, 0.6, w*1.02), new THREE.MeshBasicMaterial({color:glow}));
-        cap.position.set(g.position.x, hgt + 0.3, g.position.z); cap.userData = {h:hgt}; cap.visible = false; city.add(cap);
-        let lb = null;
-        if (n < 8){ lb = label(THREE, p.product, fmtN(p.units)+' sold', '#'+glow.toString(16).padStart(6,'0')); lb.renderOrder = 100 - n; lb.position.set(g.position.x, hgt + 10, g.position.z); lb.visible = false; city.add(lb); }
-        C.bld.set(kind+'|'+p.product, {g, cap, lb, p, glow, rank:n});
+        cap.position.set(g.position.x, hgt + 0.3, g.position.z); cap.visible = false; city.add(cap);
+        const b = {g, cap, lb:null, p, glow, rank:n, max, kind, w, bb:null, con:null, bump:0, pulse:0};
+        if (n < 8){ b.lb = label(THREE, p.product, subOf(p), hex(glow)); b.lb.renderOrder = 100 - n; b.lb.position.set(g.position.x, hgt + 10, g.position.z); b.lb.visible = false; city.add(b.lb); }
+        // Billboards on all four sides of the bigger towers, near the top.
+        if (n < 10 && hgt > 12){ const s = w*0.86, m = new THREE.MeshBasicMaterial({map:billboardTex(THREE, p, glow)}); b.bb = new THREE.Group();
+          [[0,0,1,0],[1,0,0,Math.PI/2],[0,0,-1,Math.PI],[-1,0,0,-Math.PI/2]].forEach(([x,,z,ry])=>{ const pl = new THREE.Mesh(new THREE.PlaneGeometry(s, s), m); pl.position.set(x*(w/2+0.08), 0, z*(w/2+0.08)); pl.rotation.y = ry; b.bb.add(pl); });
+          b.bb.position.set(g.position.x, hgt, g.position.z); b.bb.visible = false; b.bbS = s; city.add(b.bb); }
+        // A new product is still going up: scaffolding round it and a crane on top.
+        if (p.isNew){ const con = new THREE.Group(); con.position.set(g.position.x, 0, g.position.z);
+          const sc = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.BoxGeometry(w+1.6, 1, w+1.6, 2, 8, 2)), new THREE.LineBasicMaterial({color:0xffc233, transparent:true, opacity:0.75}));
+          const mast = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.6), new THREE.MeshBasicMaterial({color:0xffc233})); mast.position.set(w/2+1.4, 0, w/2+1.4);
+          const arm = new THREE.Group(); arm.position.set(w/2+1.4, 0, w/2+1.4);
+          const jib = new THREE.Mesh(new THREE.BoxGeometry(w*2.2, 0.45, 0.45), new THREE.MeshBasicMaterial({color:0xffc233})); jib.position.x = -w*0.6; arm.add(jib);
+          const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8), new THREE.MeshBasicMaterial({color:0xff2222})); lamp.position.y = 1; arm.add(lamp);
+          con.add(sc, mast, arm); con.userData = {sc, mast, arm, lamp}; b.con = con; city.add(con); }
+        if (p.stale) boardUp(b, true);
+        C.bld.set(kind+'|'+p.product, b);
       });
       const pad = new THREE.Mesh(new THREE.PlaneGeometry(Math.ceil(Math.sqrt(list.length)+1)*13 + 10, Math.ceil(Math.sqrt(list.length)+1)*13 + 10), new THREE.MeshBasicMaterial({color:glow, transparent:true, opacity:0.06}));
       pad.rotation.x = -Math.PI/2; pad.position.set(cx, 0.05, 0); city.add(pad);
     };
-    const off = Math.max(60, Math.ceil(Math.sqrt(Math.max(all.length, C.ws.length)))*7 + 20);
+    const off = Math.max(60, Math.ceil(Math.sqrt(Math.max(C.tk.length, C.ws.length)))*7 + 20);
+    C.off = off;
     district(C.tk, C.ws.length ? -off : 0, '#ff6b74', 0xff3b4a, 'tk');
     district(C.ws, C.tk.length ? off : 0, '#7fd8ff', 0x36c5f0, 'ws');
     // The rest of the city: a skyline of darker buildings around the districts, on a grid of glowing roads.
     if (!K.skyline){
-      K.skyline = new THREE.Group(); K.scene.add(K.skyline);
+      K.skyline = new THREE.Group(); K.scene.add(K.skyline); K.skyMats = [];
       const tex = windowTex(THREE, '#9aa6c8'), occupied = (x, z)=>Math.abs(z) < off*0.9 && Math.abs(Math.abs(x) - (C.ws.length && C.tk.length ? off : 0)) < off*0.9;
       for (let i=-14;i<=14;i++) for (let j=-14;j<=14;j++){
         const x = i*13, z = j*13; if (occupied(x, z) || Math.random() < 0.35) continue;
         const d = Math.hypot(x, z), hh = 3 + Math.random()*Math.max(4, 34 - d/9);
         const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(1, Math.max(1, Math.round(hh/12)));
-        const m = new THREE.Mesh(new THREE.BoxGeometry(6 + Math.random()*3, hh, 6 + Math.random()*3), new THREE.MeshStandardMaterial({color:0x0c0f18, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.32, roughness:0.8}));
-        m.position.set(x + (Math.random()-0.5)*3, hh/2, z + (Math.random()-0.5)*3); K.skyline.add(m);
+        const mm = new THREE.MeshStandardMaterial({color:0x0c0f18, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.32, roughness:0.8}); K.skyMats.push(mm);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(6 + Math.random()*2.4, hh, 6 + Math.random()*2.4), mm);
+        m.position.set(x + (Math.random()-0.5)*2, hh/2, z + (Math.random()-0.5)*2); K.skyline.add(m);
       }
-      const roadMat = new THREE.MeshBasicMaterial({color:0x2a3550, transparent:true, opacity:0.55});
+      K.roadMat = new THREE.MeshBasicMaterial({color:0x2a3550, transparent:true, opacity:0.55});
       for (let i=-14;i<=14;i++){
-        const a = new THREE.Mesh(new THREE.PlaneGeometry(380, 0.9), roadMat); a.rotation.x = -Math.PI/2; a.position.set(0, 0.06, i*13 + 6.5); K.skyline.add(a);
-        const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 380), roadMat); b.rotation.x = -Math.PI/2; b.position.set(i*13 + 6.5, 0.06, 0); K.skyline.add(b);
+        const a = new THREE.Mesh(new THREE.PlaneGeometry(380, 0.9), K.roadMat); a.rotation.x = -Math.PI/2; a.position.set(0, 0.06, i*13 + 6.5); K.skyline.add(a);
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 380), K.roadMat); b.rotation.x = -Math.PI/2; b.position.set(i*13 + 6.5, 0.06, 0); K.skyline.add(b);
       }
     }
     const tallest = Math.max(30, ...[...C.bld.values()].map(b=>b.g.userData.h));
     C.radius = Math.max(150, off*1.5 + tallest*1.1);
     C.look = Math.min(40, tallest*0.38);
+    C.sky.applied = -1;   // light the new buildings for the time of day
   }
-  function truck(fromKey){
+  // Lights out for a product that stopped selling; back on when it sells again.
+  function boardUp(b, on){ b.dark = on; b.g.material.color.setHex(on ? 0x08090d : 0x151925); if (b.bb) b.bb.children[0].material.color.setHex(on ? 0x3a3a3a : 0xffffff); }
+  const topOf = b=>b.g.userData.h*b.g.scale.y;
+
+  // ---- Traffic ----
+  // Ordinary traffic runs along the roads, heavier when orders are coming in. Each TikTok order sends a truck
+  // out of its product's tower towards the buyer's state, with the state on its plate.
+  const plates = new Map();
+  function plate(THREE, ab){
+    if (!plates.has(ab)){ const c = document.createElement('canvas'); c.width = 160; c.height = 80; const x = c.getContext('2d');
+      x.fillStyle = '#f4f4f0'; x.beginPath(); x.roundRect ? x.roundRect(3,3,154,74,14) : x.rect(3,3,154,74); x.fill(); x.strokeStyle = '#14151c'; x.lineWidth = 5; x.stroke();
+      x.fillStyle = '#14151c'; x.font = '800 54px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText(ab, 80, 59);
+      plates.set(ab, new THREE.CanvasTexture(c)); }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:plates.get(ab), depthTest:false, transparent:true, fog:false})); sp.scale.set(9, 4.5, 1); sp.renderOrder = 200; return sp;
+  }
+  function truck(fromKey, stateName){
     const K = C.three; if (!K) return;
     const b = C.bld.get(fromKey); const {THREE, city} = K;
-    const start = b ? b.g.position.clone() : new THREE.Vector3(0,0,0); start.y = 0.8;
-    const a = Math.random()*Math.PI*2, end = new THREE.Vector3(start.x + Math.cos(a)*400, 0.8, start.z + Math.sin(a)*400);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, 1.2), new THREE.MeshBasicMaterial({color:0xffd68a}));
-    m.position.copy(start); m.lookAt(end); city.add(m);
-    C.trucks.push({m, start, end, t:0});
+    const start = b ? b.g.position.clone() : new THREE.Vector3(0,0,0); start.y = 1.1;
+    let a = Math.random()*Math.PI*2, ab = '';
+    const G = window.STOCKROOM_GEO;
+    if (G && stateName){ ab = G.names[String(stateName).toLowerCase()] || String(stateName).toUpperCase(); const p = G.st[ab], hm = tvHome();
+      if (p){ const dx = (p[1] - hm.lng)*Math.cos(hm.lat*Math.PI/180), dz = -(p[0] - hm.lat); if (Math.abs(dx)+Math.abs(dz) > 0.3) a = Math.atan2(dz, dx); } else ab = ''; }
+    const end = new THREE.Vector3(start.x + Math.cos(a)*460, 1.1, start.z + Math.sin(a)*460);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.2, 1.8), new THREE.MeshBasicMaterial({color:b ? b.glow : 0xffd68a}));
+    m.position.copy(start); m.lookAt(end); m.rotateY(Math.PI/2); city.add(m);
+    const car = {m, start, end, t:0, speed:0.1, order:true};
+    if (ab && ab.length <= 3){ car.tag = plate(THREE, ab); car.tag.position.copy(start); car.tag.position.y = 6; city.add(car.tag); car.ab = ab; }
+    C.cars.push(car);
     if (b){ b.pulse = 1; }
   }
+  function ambient(){
+    const K = C.three; if (!K || C.cars.length > 150) return; const {THREE} = K;
+    const road = (Math.floor(Math.random()*29) - 14)*13 + 6.5, dir = Math.random() < 0.5 ? 1 : -1, alongX = Math.random() < 0.5, lane = dir*0.9;
+    const s = new THREE.Vector3(alongX ? -190*dir : road + lane, 0.6, alongX ? road + lane : -190*dir), e = new THREE.Vector3(alongX ? 190*dir : road + lane, 0.6, alongX ? road + lane : 190*dir);
+    const m = new THREE.Mesh(K.carGeo || (K.carGeo = new THREE.BoxGeometry(2.2, 0.9, 1.1)), dir > 0 ? (K.carA || (K.carA = new THREE.MeshBasicMaterial({color:0xffe9b0}))) : (K.carB || (K.carB = new THREE.MeshBasicMaterial({color:0xff4d4d}))));
+    m.position.copy(s); if (!alongX) m.rotation.y = Math.PI/2; K.scene.add(m);
+    C.cars.push({m, start:s, end:e, t:0, speed:0.07 + Math.random()*0.06, order:false});
+  }
+
+  // ---- Fireworks, coin rain, spotlight ----
+  function burst(x, y, z, color, n, power){
+    const K = C.three; if (!K) return; const {THREE} = K;
+    const pos = new Float32Array(n*3), vel = [];
+    for (let i=0;i<n;i++){ pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z; const a = Math.random()*Math.PI*2, f = Math.acos(2*Math.random()-1), v = power*(0.5+Math.random()*0.5); vel.push(Math.sin(f)*Math.cos(a)*v, Math.cos(f)*v, Math.sin(f)*Math.sin(a)*v); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({color, size:power > 20 ? 3.2 : 2, sizeAttenuation:false, transparent:true, fog:false, depthWrite:false}));
+    K.scene.add(pts); C.fx.push({pts, vel, t:0, life:power > 20 ? 2.2 : 1.1});
+  }
+  function fireworks(n){
+    C.fireworks = (C.fireworks||0) + n; el.dataset.fireworks = String(C.fireworks);
+    const cols = [0xff3b4a, 0xffc233, 0x36c5f0, 0x3ddc97, 0xffffff, 0xff7ad9];
+    for (let i=0;i<n;i++) setTimeout(()=>{ if (!el.isConnected) return; burst((Math.random()-0.5)*(C.radius||200), 80 + Math.random()*70, (Math.random()-0.5)*(C.radius||200), cols[Math.floor(Math.random()*cols.length)], 110, 34); }, i*420 + Math.random()*200);
+  }
+  // What the day's sales are doing to the weather: a record hour rains coins, a quiet half hour brings fog, and
+  // a product running away with the last half hour gets a spotlight. Today beating the average day, and every
+  // 100th order, set off fireworks.
+  function weather(){
+    const now = Date.now()/1000, list = [...T.orders.values()].filter(o=>o.status!=='CANCELLED' && o.status!=='UNPAID' && o.t*1000 >= T.day);
+    const hours = new Map(); let last30 = 0; const prod = new Map();
+    for (const o of list){ const k = Math.floor((now - o.t)/3600); hours.set(k, (hours.get(k)||0)+1);
+      if (now - o.t < 1800){ last30++; for (const l of o.items) prod.set(l.name, (prod.get(l.name)||0)+1); } }
+    const cur = hours.get(0)||0, before = Math.max(0, ...[...hours.entries()].filter(([k])=>k>0).map(([,v])=>v));
+    const record = forced('coins') || (cur >= 5 && hours.size > 1 && cur > before);
+    if (record) C.wx.coinsUntil = Date.now() + 20000;
+    const slow = forced('fog') || (!!tt && T.loaded && last30===0);
+    C.wx.fogTo = slow ? 1 : 0;
+    const ranked = [...prod.entries()].sort((a,b)=>b[1]-a[1]);
+    C.wx.spot = forced('spot') ? (C.tk[0] ? C.tk[0].product : '') : (ranked[0] && ranked[0][1] >= 3 && ranked[0][1] >= 2*((ranked[1]||[0,0])[1]) ? ranked[0][0] : '');
+    const hundreds = Math.floor(list.length/100);
+    if (C.hundreds >= 0 && hundreds > C.hundreds) fireworks(6);
+    C.hundreds = hundreds;
+    const avg = C.orders/Math.max(1, C.days);
+    if (T.loaded && avg > 0 && list.length > avg && C.bigDay!==T.day){ if (C.bigDay) fireworks(14); C.bigDay = T.day; }   // (not on opening the city: only when today passes the average while it is watched)
+    if (forced('fireworks') && !C.fwForced){ C.fwForced = true; fireworks(10); }
+    const d = C.sky.day, g = C.sky.glow, hr = cityHour();
+    const tod = g > 0.45 ? (hr < 12 ? 'Sunrise' : 'Sunset') : d > 0.5 ? 'Daytime' : 'Night';
+    C.wx.text = tod+' in '+String(tvHome().name==='Warehouse' ? 'the city' : tvHome().name.split(',')[0])+(record ? ' · Record hour: it’s raining coins' : C.wx.spot ? ' · Spotlight on '+C.wx.spot : slow ? ' · Quiet right now: fog rolling in' : '');
+    wxEl.textContent = C.wx.text;
+  }
+  // The city's clock is the warehouse's (US Eastern): the sky follows the real time of day.
+  function cityHour(){
+    try { const f = localStorage.getItem('ss_tvcityhour'); if (f !== null && f !== '') return +f; } catch(e){}
+    const p = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hourCycle:'h23'}).formatToParts(Date.now());
+    return +p.find(x=>x.type==='hour').value + (+p.find(x=>x.type==='minute').value)/60;
+  }
+  function daylight(){
+    const K = C.three, {THREE} = K, hr = cityHour(), elev = Math.sin((hr - 6)/12*Math.PI);
+    const day = Math.max(0, Math.min(1, (elev + 0.12)/0.35)), glow = Math.max(0, 1 - Math.abs(elev)/0.32);
+    C.sky.day = day; C.sky.glow = glow;
+    const key = Math.round(day*200) + Math.round(glow*200)*1000; if (key===C.sky.applied) return; C.sky.applied = key;
+    const mix = (a, b, t)=>new THREE.Color(a).lerp(new THREE.Color(b), t);
+    const sky = mix(0x04050a, 0x6faee6, day).lerp(new THREE.Color(0xff7f4a), glow*(0.28 + 0.3*day));
+    K.scene.background = sky; K.scene.fog.color = sky;
+    K.hemi.intensity = 0.6 + 0.9*day; K.hemi.color = mix(0x4060a0, 0xdfeaff, day); K.hemi.groundColor = mix(0x080810, 0x6b6f78, day);
+    K.sun.intensity = 0.5 + 0.9*day; K.sun.color = mix(0xaabbff, 0xfff0d2, day).lerp(new THREE.Color(0xff9a5a), glow*0.6);
+    const th = (hr - 6)/12*Math.PI; K.sun.position.set(Math.cos(th)*300, Math.max(60, Math.sin(th)*300), 120);
+    K.orb.position.set(Math.cos(th)*1100, Math.sin(th)*1100, -500); K.orb.material.color = mix(0xfff3c4, 0xff8a4a, glow); K.orb.visible = elev > -0.1;
+    K.moon.position.set(-Math.cos(th)*1100, -Math.sin(th)*1100, -500); K.moon.visible = elev < 0.1;
+    K.ground.material.color = mix(0x07080d, 0x2b3038, day); K.stars.material.opacity = 1 - day; K.stars.visible = day < 0.98;
+    K.grid.material.opacity = 1 - day*0.7; if (K.roadMat) K.roadMat.color = mix(0x2a3550, 0x23262e, day);
+    for (const b of C.bld.values()){ if (!b.dark) b.g.material.color = mix(0x151925, 0x7c88a6, day); b.lit = 0.9 - 0.72*day; }
+    for (const m of K.skyMats||[]){ m.color = mix(0x0c0f18, 0x5d6880, day); m.emissiveIntensity = 0.32 - 0.26*day; }
+  }
+
+  // ---- Camera: the slow orbit, or the drone tour (also the City video's camera) ----
+  // The tour's shots, as shares of one lap: high and wide, down a street, round the 3rd, 2nd and 1st tallest
+  // towers, then pulling back over the whole city.
+  const SHOTS = [['wide',0.12],['street',0.2],['tower',0.13,2],['tower',0.13,1],['tower',0.14,0],['pull',0.28]];
+  const ease = x=>x<0 ? 0 : x>1 ? 1 : x*x*(3-2*x);
+  const tops = ()=>[...C.bld.values()].sort((a,b)=>topOf(b)-topOf(a)).slice(0,3);
+  function shotAt(f){ let a = 0; for (const [kind, len, i] of SHOTS){ if (f < a + len || kind==='pull') return {kind, i, u:Math.max(0, Math.min(1, (f - a)/len))}; a += len; } }
+  function tourCam(camera, f){
+    const s = shotAt(f), u = ease(s.u), R = C.radius||220, off = C.off||60, tw = tops();
+    if (s.kind==='wide'){ const a = 0.9 + u*0.5; camera.position.set(Math.cos(a)*R*1.15, R*0.6 - u*20, Math.sin(a)*R*1.15); camera.lookAt(0, C.look||22, 0); }
+    else if (s.kind==='street'){ const x = -off - 90 + u*(2*off + 150); camera.position.set(x, 3.5 + u*16, 6.5); camera.lookAt(x + 60, 10 + u*26, 6.5 - u*8); }
+    else if (s.kind==='tower' && tw.length){ const b = tw[Math.min(s.i, tw.length-1)], top = topOf(b), a = 0.6 + s.i*2 + u*2.1, r = 40 - u*12;
+      camera.position.set(b.g.position.x + Math.cos(a)*r, top*0.5 + u*(top*0.5 + 6), b.g.position.z + Math.sin(a)*r); camera.lookAt(b.g.position.x, top*0.72 + u*top*0.2, b.g.position.z); }
+    else { const a = 2.4 + u*1.3, r = 110 + u*(R*1.25 - 110); camera.position.set(Math.cos(a)*r, 46 + u*r*0.45, Math.sin(a)*r); camera.lookAt(0, C.look||22, 0); }
+    return s;
+  }
+
+  // The City video: one lap of the drone tour with titles and music, recorded straight from the city.
+  function makeVideo(){
+    const K = C.three;
+    if (!K || !window.MediaRecorder){ toast('Recording a video is not available in this browser.'); return; }
+    if (!C.bld.size){ toast('The city has no buildings to film yet.'); return; }
+    if (C.rec) return;
+    const LEN = (()=>{ try { return Math.max(3, +localStorage.getItem('ss_tvvideolen') || 45); } catch(e){ return 45; } })();
+    const W = 1280, H = 720, out = document.createElement('canvas'); out.width = W; out.height = H; const cx = out.getContext('2d');
+    const rec = h('div',{class:'rec'}, h('i',{}), h('span',{}, 'Recording the City video…')), stopBtn = h('button',{class:'stop',type:'button'},'Stop');
+    const stage = h('div',{class:'vstage'}, out, rec, stopBtn); el.closest('#tv').append(stage);
+    const film = tvFilm(out, LEN), mr = film.mr; let stopped = false, shot3 = false;
+    const {renderer, camera} = K; renderer.setPixelRatio(1); renderer.setSize(W, H, false); camera.aspect = W/H; camera.updateProjectionMatrix();
+    const txt = (t, x, y, size, color, alpha, align, weight)=>{ cx.globalAlpha = Math.max(0, Math.min(1, alpha)); cx.fillStyle = color; cx.font = (weight||700)+' '+size+"px 'Bricolage Grotesque', system-ui, sans-serif"; cx.textAlign = align || 'left'; cx.fillText(t, x, y); cx.globalAlpha = 1; };
+    const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0), day = new Date().toLocaleDateString([], {month:'long', day:'numeric', year:'numeric'});
+    const T0 = performance.now();
+    C.rec = {
+      f:()=>Math.min(1, (performance.now() - T0)/1000/LEN),
+      draw(){
+        const f = this.f(), s = shotAt(f);
+        cx.clearRect(0,0,W,H); cx.drawImage(renderer.domElement, 0, 0, W, H);
+        const vg = cx.createLinearGradient(0,0,0,H); vg.addColorStop(0,'rgba(0,0,0,.5)'); vg.addColorStop(.3,'rgba(0,0,0,0)'); vg.addColorStop(.7,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.65)'); cx.fillStyle = vg; cx.fillRect(0,0,W,H);
+        const ti = ease(f/0.03) * (1 - ease((f-0.1)/0.03));
+        txt(title.textContent, W/2, H*0.45, 92, '#ffffff', ti, 'center', 800);
+        txt('Every tower is a product. The taller it is, the more it sold.', W/2, H*0.45 + 56, 28, '#ffd9dc', ti, 'center', 600);
+        txt(BRAND()+' · last '+C.days+' days', W/2, H*0.45 + 98, 24, '#c3c3cc', ti, 'center', 500);
+        if (s.kind==='tower'){ const tw = tops(), b = tw[Math.min(s.i, tw.length-1)], a = ease(s.u/0.15) * (1 - ease((s.u-0.88)/0.12));
+          if (b){ txt('#'+(Math.min(s.i, tw.length-1)+1), 64, H - 132, 110, hex(b.glow), a, 'left', 800);
+            txt(b.p.product.length > 34 ? b.p.product.slice(0,33)+'…' : b.p.product, 64, H - 78, 44, '#ffffff', a, 'left', 800);
+            txt(fmtN(b.p.units)+' sold'+(b.kind==='tk' ? ' on TikTok Shop' : ' wholesale'), 66, H - 40, 28, '#c3c3cc', a, 'left', 500); } }
+        if (s.kind==='pull'){ if (!shot3){ shot3 = true; fireworks(12); }
+          const a = ease(s.u/0.12) * (1 - ease((f-0.86)/0.04));
+          txt(fmtN(totalTk + totalWs), 64, H - 92, 96, '#ffffff', a, 'left', 800); txt('sold in '+C.days+' days', 68, H - 52, 28, '#c3c3cc', a, 'left', 500); }
+        const ei = ease((f-0.88)/0.05);
+        if (ei > 0){ cx.globalAlpha = ei*0.72; cx.fillStyle = '#000'; cx.fillRect(0,0,W,H); cx.globalAlpha = 1;
+          txt(fmtN(totalTk + totalWs)+' sold', W/2, H*0.42, 92, '#ffffff', ei, 'center', 800);
+          txt((totalTk ? fmtN(totalTk)+' on TikTok Shop' : '')+(totalTk && totalWs ? ' · ' : '')+(totalWs ? fmtN(totalWs)+' wholesale' : ''), W/2, H*0.42 + 66, 36, '#ffb84d', ei, 'center', 700);
+          txt(BRAND()+' · '+day, W/2, H*0.42 + 122, 26, '#c3c3cc', ei, 'center', 500); }
+        if (f >= 1 || stopped){ const r = C.rec; C.rec = null; if (r && mr.state !== 'inactive') mr.stop(); }
+      }
+    };
+    mr.onstop = async ()=>{ stage.remove(); renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1)); C.resize && C.resize(); await film.save(stopped, 'city'); };
+    stopBtn.onclick = ()=>{ stopped = true; };
+    mr.start(1000);
+  }
+
   async function start(){
     try {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+      loadScript('js/geo-us.js').catch(()=>{});   // for the trucks' states
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
       const THREE = window.THREE;
       const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:false});
@@ -5501,41 +5729,82 @@ function tvCity(T, tt){
       el.prepend(renderer.domElement);
       const scene = new THREE.Scene(); scene.background = new THREE.Color(0x04050a); scene.fog = new THREE.FogExp2(0x04050a, 0.0019);
       const camera = new THREE.PerspectiveCamera(50, (el.clientWidth||800)/(el.clientHeight||600), 1, 3000);
-      scene.add(new THREE.HemisphereLight(0x4060a0, 0x080810, 0.6));
-      const moon = new THREE.DirectionalLight(0xaabbff, 0.5); moon.position.set(-200, 300, 100); scene.add(moon);
+      const hemi = new THREE.HemisphereLight(0x4060a0, 0x080810, 0.6); scene.add(hemi);
+      const sun = new THREE.DirectionalLight(0xaabbff, 0.5); sun.position.set(-200, 300, 100); scene.add(sun);
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({color:0x07080d, roughness:1}));
       ground.rotation.x = -Math.PI/2; scene.add(ground);
-      const grid = new THREE.GridHelper(2000, 154, 0x1a2030, 0x10141e); grid.position.y = 0.02; scene.add(grid);
+      const grid = new THREE.GridHelper(2000, 154, 0x1a2030, 0x10141e); grid.position.y = 0.02; grid.material.transparent = true; scene.add(grid);
       const sg = new THREE.BufferGeometry(), sp = [];
       for (let i=0;i<1500;i++){ const t = Math.random()*Math.PI*2, f = Math.random()*Math.PI*0.45; sp.push(Math.cos(t)*Math.cos(f)*1400, 80 + Math.sin(f)*1400, Math.sin(t)*Math.cos(f)*1400); }
       sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-      scene.add(new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff, size:1.6, sizeAttenuation:false})));
+      const stars = new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff, size:1.6, sizeAttenuation:false, transparent:true, fog:false})); scene.add(stars);
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(46, 24, 24), new THREE.MeshBasicMaterial({color:0xfff3c4, fog:false})); scene.add(orb);
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 24), new THREE.MeshBasicMaterial({color:0xd7def2, fog:false})); scene.add(moon);
+      // Coin rain: gold falling over the whole city, shown during a record hour.
+      const cg = new THREE.BufferGeometry(), cp = new Float32Array(700*3);
+      for (let i=0;i<700;i++){ cp[i*3] = (Math.random()-0.5)*420; cp[i*3+1] = Math.random()*190; cp[i*3+2] = (Math.random()-0.5)*420; }
+      cg.setAttribute('position', new THREE.BufferAttribute(cp, 3));
+      const coins = new THREE.Points(cg, new THREE.PointsMaterial({color:0xffc233, size:3.4, sizeAttenuation:false, transparent:true, opacity:0, fog:false, depthWrite:false})); coins.visible = false; scene.add(coins);
+      // The spotlight: two beams sweeping the sky from the top of the tower that is running away with it.
+      const beamGeo = new THREE.CylinderGeometry(9, 0.6, 150, 20, 1, true); beamGeo.translate(0, 75, 0);
+      const beamMat = new THREE.MeshBasicMaterial({color:0xfff2b8, transparent:true, opacity:0.16, side:THREE.DoubleSide, depthWrite:false, blending:THREE.AdditiveBlending, fog:false});
+      const spot = new THREE.Group(); spot.add(new THREE.Mesh(beamGeo, beamMat), new THREE.Mesh(beamGeo, beamMat)); spot.visible = false; scene.add(spot);
       const city = new THREE.Group(); scene.add(city);
-      C.three = {THREE, renderer, scene, camera, city};
+      C.three = {THREE, renderer, scene, camera, city, hemi, sun, ground, grid, stars, orb, moon, coins, spot};
       // Look around: drag to turn, wheel to zoom; after a few seconds alone it flies on its own again.
       const cv = renderer.domElement;
-      cv.addEventListener('pointerdown', e=>{ C.drag = {x:e.clientX, y:e.clientY, a:C.ang, h:C.hgt||0.45}; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+      cv.addEventListener('pointerdown', e=>{ if (C.tour) setTour(false); C.drag = {x:e.clientX, y:e.clientY, a:C.ang, h:C.hgt||0.45}; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
       cv.addEventListener('pointermove', e=>{ if (!C.drag) return; C.ang = C.drag.a - (e.clientX - C.drag.x)*0.005; C.hgt = Math.max(0.12, Math.min(1.2, C.drag.h + (e.clientY - C.drag.y)*0.003)); C.idleAt = Date.now(); });
       cv.addEventListener('pointerup', ()=>{ C.drag = null; cv.style.cursor = 'grab'; C.idleAt = Date.now(); });
       cv.addEventListener('wheel', e=>{ e.preventDefault(); C.zoom = Math.max(0.4, Math.min(2.2, (C.zoom||1) * (e.deltaY > 0 ? 1.08 : 0.92))); C.idleAt = Date.now(); }, {passive:false});
-      C.resize = ()=>{ const w = el.clientWidth, hh = el.clientHeight; if (!w || !hh) return; renderer.setSize(w, hh); camera.aspect = w/hh; camera.updateProjectionMatrix(); };
+      C.resize = ()=>{ if (C.rec) return; const w = el.clientWidth, hh = el.clientHeight; if (!w || !hh) return; renderer.setSize(w, hh); camera.aspect = w/hh; camera.updateProjectionMatrix(); };
       if (window.ResizeObserver){ C.ro = new ResizeObserver(C.resize); C.ro.observe(el); }
       build();
-      let last = performance.now();
+      let last = performance.now(), slowTick = 0, clock = 0;
       const frame = now=>{
-        const dt = Math.min(0.05, (now - last)/1000); last = now;
-        if (!C.drag && Date.now() - C.idleAt > 6000) C.ang += dt*0.06;
-        const R = (C.radius||220) * (C.zoom||1), hgt = C.hgt || 0.45;
-        camera.position.set(Math.cos(C.ang)*R, R*hgt + 20, Math.sin(C.ang)*R); camera.lookAt(0, C.look || 22, 0);
+        const dt = Math.min(0.05, (now - last)/1000); last = now; clock += dt;
+        const showing = !el.hidden && !document.hidden;
+        if (showing && now - slowTick > 4000){ slowTick = now; daylight(); weather(); }
+        // Camera.
+        if (C.rec) tourCam(camera, C.rec.f());
+        else if (C.tour) tourCam(camera, ((now - C.tourAt)/1000 % 70)/70);
+        else { if (!C.drag && Date.now() - C.idleAt > 6000) C.ang += dt*0.06;
+          const R = (C.radius||220) * (C.zoom||1), hgt = C.hgt || 0.45;
+          camera.position.set(Math.cos(C.ang)*R, R*hgt + 20, Math.sin(C.ang)*R); camera.lookAt(0, C.look || 22, 0); }
+        // Buildings: grow to their height (and a little more with each sale), light up when they sell.
         for (const b of C.bld.values()){
-          const g = b.g; if (g.scale.y < 1){ g.scale.y = Math.min(1, g.scale.y + dt*(0.35 + g.userData.grow*60)); g.position.y = g.userData.h*g.scale.y/2; }
-          const top = g.userData.h*g.scale.y; b.cap.position.y = top + 0.3; b.cap.visible = g.scale.y >= 1;
-          if (b.lb){ b.lb.position.y = top + 10; b.lb.visible = g.scale.y >= 1; }
-          if (b.pulse){ b.pulse = Math.max(0, b.pulse - dt*0.7); g.material.emissiveIntensity = 0.9 + b.pulse*1.6; }
+          const g = b.g, u = g.userData;
+          if (u.s < u.ts) u.s = Math.min(u.ts, u.s + dt*(0.35 + u.grow*60)*Math.max(1, u.ts)); else if (u.s > u.ts) u.s = Math.max(u.ts, u.s - dt*0.2);
+          if (b.bump) b.bump = Math.max(0, b.bump - dt*1.6);
+          g.scale.y = u.s*(1 + 0.05*Math.sin(b.bump*Math.PI)); g.position.y = u.h*g.scale.y/2;
+          const top = u.h*g.scale.y, up = u.s >= Math.min(1, u.ts);
+          b.cap.position.y = top + 0.3; b.cap.visible = up && !b.dark;
+          if (b.lb){ b.lb.position.y = top + (b.con ? 18 : 10); b.lb.visible = up; }
+          if (b.bb){ b.bb.position.y = top - b.bbS*0.62; b.bb.visible = up; }
+          if (b.con){ const c = b.con.userData; c.sc.scale.y = top + 2; c.sc.position.y = (top + 2)/2; c.mast.scale.y = top + 9; c.mast.position.y = (top + 9)/2; c.arm.position.y = top + 9; c.arm.rotation.y += dt*0.35; c.lamp.visible = (clock % 1.2) < 0.6; }
+          if (b.pulse) b.pulse = Math.max(0, b.pulse - dt*0.7);
+          g.material.emissiveIntensity = b.dark ? 0.03 : (b.lit === undefined ? 0.9 : b.lit) + b.pulse*1.6;
         }
-        C.trucks = C.trucks.filter(t=>{ t.t += dt*0.12; t.m.position.lerpVectors(t.start, t.end, t.t); if (t.t >= 1){ C.three.city.remove(t.m); return false; } return true; });
-        if (Math.random() < dt*0.5 && C.bld.size){ const ks = [...C.bld.keys()]; truck(ks[Math.floor(Math.random()*Math.min(ks.length, 12))]); }   // the city's daily traffic
-        if (!el.hidden && !document.hidden) renderer.render(scene, camera);
+        // Traffic.
+        C.cars = C.cars.filter(c=>{ c.t += dt*c.speed; c.m.position.lerpVectors(c.start, c.end, c.t); if (c.tag){ c.tag.position.set(c.m.position.x, 6.5, c.m.position.z); }
+          if (c.t >= 1){ c.m.parent && c.m.parent.remove(c.m); if (c.tag) c.tag.parent && c.tag.parent.remove(c.tag); return false; } return true; });
+        const nowS = Date.now()/1000; let recent = 0; for (const o of T.orders.values()) if (nowS - o.t < 600) recent++;
+        if (showing && Math.random() < dt*Math.min(9, 0.9 + recent*0.35)) ambient();
+        // Fireworks and sale bursts.
+        C.fx = C.fx.filter(x=>{ x.t += dt; const p = x.pts.geometry.attributes.position, a = p.array;
+          for (let i=0;i<x.vel.length;i+=3){ a[i] += x.vel[i]*dt; a[i+1] += x.vel[i+1]*dt; a[i+2] += x.vel[i+2]*dt; x.vel[i+1] -= 22*dt; x.vel[i] *= 0.985; x.vel[i+2] *= 0.985; }
+          p.needsUpdate = true; x.pts.material.opacity = Math.max(0, 1 - x.t/x.life);
+          if (x.t >= x.life){ scene.remove(x.pts); x.pts.geometry.dispose(); x.pts.material.dispose(); return false; } return true; });
+        // Weather.
+        const raining = Date.now() < C.wx.coinsUntil; coins.material.opacity += ((raining ? 0.95 : 0) - coins.material.opacity)*Math.min(1, dt*2); coins.visible = coins.material.opacity > 0.02;
+        if (coins.visible){ const a = cg.attributes.position.array; for (let i=1;i<a.length;i+=3){ a[i] -= dt*(38 + (i % 7)*4); if (a[i] < 0) a[i] = 190; } cg.attributes.position.needsUpdate = true; }
+        el.dataset.coins = raining ? '1' : '';
+        C.wx.fog += ((C.wx.fogTo||0) - C.wx.fog)*Math.min(1, dt*0.4); scene.fog.density = 0.0019 + 0.0052*C.wx.fog;
+        const sb = C.wx.spot && C.bld.get('tk|'+C.wx.spot);
+        spot.visible = !!sb; el.dataset.spot = sb ? C.wx.spot : '';
+        if (sb){ spot.position.set(sb.g.position.x, topOf(sb), sb.g.position.z); spot.children[0].rotation.set(Math.sin(clock*0.7)*0.35, 0, Math.cos(clock*0.5)*0.3); spot.children[1].rotation.set(Math.cos(clock*0.6)*0.35, 0, -Math.sin(clock*0.8)*0.3); }
+        if (showing){ renderer.render(scene, camera); if (C.rec) C.rec.draw(); }
+        else if (C.rec){ C.rec.draw(); }
         C.raf = requestAnimationFrame(frame);
       };
       C.raf = requestAnimationFrame(frame);
@@ -5548,27 +5817,33 @@ function tvCity(T, tt){
     const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0);
     sub.textContent = 'Last '+C.days+' days · '+fmtN(totalTk)+' sold on TikTok · '+fmtN(totalWs)+' sold wholesale';
   }
-  // Puts a building's new count on its label.
+  // A building's new count: on its label, and in its height.
   function relabel(kind, p){
     const b = C.bld.get(kind+'|'+p.product), K = C.three; if (!b || !K) return;
-    b.p = p; if (!b.lb) return;
-    const lb = label(K.THREE, p.product, fmtN(p.units)+' sold', '#'+b.glow.toString(16).padStart(6,'0'));
+    b.p = p; b.g.userData.ts = Math.max(b.g.userData.ts, heightFor(p.units, b.max)/b.g.userData.h);
+    if (b.dark && !p.stale) boardUp(b, false);
+    if (!b.lb) return;
+    const lb = label(K.THREE, p.product, subOf(p), hex(b.glow));
     lb.renderOrder = b.lb.renderOrder; lb.position.copy(b.lb.position); lb.visible = b.lb.visible;
     K.city.remove(b.lb); try { b.lb.material.map.dispose(); b.lb.material.dispose(); } catch(e){} K.city.add(lb); b.lb = lb;
   }
-  // New TikTok orders count straight away: the totals and labels go up, a truck leaves each product's tower.
-  // A product not in the city yet gets its building on the next refresh.
+  // New TikTok orders count straight away: the totals and labels go up, the tower grows a little with a burst
+  // on its roof, and a truck leaves for the buyer's state. A product not in the city yet gets its building on
+  // the next refresh.
   function onOrders(nf){
-    let changed = false;
+    let changed = false, trucks = 0;
     for (const o of nf) for (const l of o.items){
       const name = String(l.name || 'Item'); let p = C.tk.find(x=>x.product===name);
       if (!p){ p = {product:name, units:0, gmv:0}; C.tk.push(p); }
-      p.units += Math.max(1, +l.qty || 1); changed = true;
-      relabel('tk', p); truck('tk|'+name);
+      p.units += Math.max(1, +l.qty || 1); p.stale = false; p.quietDays = 0; changed = true;
+      relabel('tk', p);
+      const b = C.bld.get('tk|'+name);
+      if (b){ b.bump = 1; if (trucks < 24) burst(b.g.position.x, topOf(b) + 1.5, b.g.position.z, b.glow, 26, 9); }
+      if (trucks++ < 24) truck('tk|'+name, o.state);
     }
-    if (changed){ C.tk.sort((a,b)=>b.units-a.units); hud(); }
+    if (changed){ C.grown = (C.grown||0) + 1; C.tk.sort((a,b)=>b.units-a.units); hud(); }
   }
-  return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); try { C.three && C.three.renderer.dispose(); } catch(e){} }};
+  return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); if (C.rec){ try { C.rec = null; } catch(e){} } try { C.three && C.three.renderer.dispose(); } catch(e){} }};
 }
 
 // The commentator: the Mac's own voice (speech synthesis, free) calls the action. One line at a time; a more

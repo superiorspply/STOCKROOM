@@ -116,19 +116,49 @@ try {
   // Squishy City: the products' buildings, from TikTok's daily tallies.
   await tv.getByRole('button', {name:'City', exact:true}).click();
   await P.waitForFunction(() => document.querySelector('#tv .tvcity')?.dataset.ready === '1', null, {timeout:30000, polling:500});
-  await tv.locator('.tvcity .hud p').filter({hasText:/sold on TikTok/}).waitFor({timeout:20000});
-  await P.waitForFunction(() => /[1-9][\d,]* sold on TikTok/.test(document.querySelector('#tv .tvcity .hud p')?.textContent || ''), null, {timeout:30000, polling:500});
+  await tv.locator('.tvcity .hud p:not(.wx)').filter({hasText:/sold on TikTok/}).waitFor({timeout:20000});
+  await P.waitForFunction(() => /[1-9][\d,]* sold on TikTok/.test(document.querySelector('#tv .tvcity .hud p:not(.wx)')?.textContent || ''), null, {timeout:30000, polling:500});
   const hud = await tv.locator('.tvcity .hud').textContent();
   check(/Squishy City/.test(hud) && /Last 30 days · [\d,]+ sold on TikTok/.test(hud) && await tv.locator('.tvcity canvas').count() === 1 && await tv.locator('.tvrace').isHidden(), 'City view builds Squishy City from TikTok sales (' + hud.slice(0, 90) + ')');
   await tv.getByRole('button', {name:'7 days'}).click();
-  await tv.locator('.tvcity .hud p').filter({hasText:'Last 7 days'}).waitFor({timeout:10000});
+  await tv.locator('.tvcity .hud p:not(.wx)').filter({hasText:'Last 7 days'}).waitFor({timeout:10000});
   check(true, 'the city can show the last 7, 30 or 90 days');
-  const soldNow = async () => +((await tv.locator('.tvcity .hud p').textContent()).match(/([\d,]+) sold on TikTok/)[1].replace(/,/g, ''));
+  const soldNow = async () => +((await tv.locator('.tvcity .hud p:not(.wx)').textContent()).match(/([\d,]+) sold on TikTok/)[1].replace(/,/g, ''));
   const cityBefore = await soldNow();
   await fetch(API + '/mock-tiktok/add-order', {method:'POST', body:JSON.stringify({name:'Squishy Butter', price:15})});
-  await P.waitForFunction(n => +((document.querySelector('#tv .tvcity .hud p')?.textContent || '').match(/([\d,]+) sold on TikTok/) || [0, '0'])[1].replace(/,/g, '') > n, cityBefore, {timeout:40000, polling:500});
+  await P.waitForFunction(n => +((document.querySelector('#tv .tvcity .hud p:not(.wx)')?.textContent || '').match(/([\d,]+) sold on TikTok/) || [0, '0'])[1].replace(/,/g, '') > n, cityBefore, {timeout:40000, polling:500});
   check(await soldNow() === cityBefore + 1, 'a new TikTok order adds to the city straight away (' + cityBefore + ' → ' + await soldNow() + ')');
+  // The order grew its tower and sent a truck towards the buyer's state, with the state on its plate.
+  const cityState = () => P.evaluate(() => { const C = document.querySelector('#tv .tvcity')._city; const b = C.bld.get('tk|Squishy Butter');
+    return {grown:C.grown || 0, ts:b ? b.g.userData.ts : 0, plates:C.cars.filter(c => c.order && c.ab).map(c => c.ab), billboards:[...C.bld.values()].filter(b => b.bb).length, cars:C.cars.length, wx:document.querySelector('#tv .tvcity .hud .wx').textContent}; });
+  const cs = await cityState();
+  check(cs.grown >= 1 && cs.ts > 1 && cs.plates.length >= 1 && /^[A-Z]{2}$/.test(cs.plates[0]), 'the sale grows its tower and sends a truck to the buyer\'s state (plate ' + cs.plates[0] + ')');
+  check(cs.billboards >= 2 && cs.cars >= 1, 'the big towers carry billboards and traffic runs on the roads (' + cs.billboards + ' billboards)');
+  check(/^(Night|Daytime|Sunrise|Sunset) in /.test(cs.wx), 'the sky follows the time of day (' + cs.wx + ')');
   if (process.env.SHOT4) { await P.waitForTimeout(6000); await P.screenshot({path:process.env.SHOT4}); }
+  // Weather: a record hour rains coins, a runaway product gets the spotlight, fireworks for a big day.
+  await P.evaluate(() => localStorage.setItem('ss_tvcitywx', 'coins,spot,fireworks'));
+  await P.waitForFunction(() => { const e = document.querySelector('#tv .tvcity'); return e.dataset.coins === '1' && e.dataset.spot && +e.dataset.fireworks >= 10; }, null, {timeout:20000, polling:500});
+  check(/raining coins/.test(await tv.locator('.tvcity .hud .wx').textContent()), 'a record hour rains coins, with a spotlight and fireworks');
+  if (process.env.SHOT6) { await P.waitForTimeout(2500); await P.screenshot({path:process.env.SHOT6}); }
+  await P.evaluate(() => { localStorage.removeItem('ss_tvcitywx'); localStorage.setItem('ss_tvcityhour', '13'); });
+  await tv.locator('.tvcity .hud .wx').filter({hasText:'Daytime'}).waitFor({timeout:20000});
+  check(true, 'by day the city is in daylight');
+  if (process.env.SHOT7) { await P.waitForTimeout(1500); await P.screenshot({path:process.env.SHOT7}); }
+  await P.evaluate(() => localStorage.setItem('ss_tvcityhour', '18.2'));
+  await tv.locator('.tvcity .hud .wx').filter({hasText:'Sunset'}).waitFor({timeout:20000});
+  if (process.env.SHOT8) { await P.waitForTimeout(1500); await P.screenshot({path:process.env.SHOT8}); }
+  await P.evaluate(() => localStorage.removeItem('ss_tvcityhour'));
+  // Drone tour, and the City video recorded from it.
+  await tv.getByRole('button', {name:'Drone tour'}).click();
+  await P.waitForFunction(() => document.querySelector('#tv .tvcity').dataset.tour === '1');
+  if (process.env.SHOT9) { await P.waitForTimeout(16000); await P.screenshot({path:process.env.SHOT9}); }
+  check(await tv.getByRole('button', {name:'Drone tour'}).getAttribute('aria-pressed') === 'true', 'the drone tour flies the camera through the city');
+  const [cfilm] = await Promise.all([P.waitForEvent('download', {timeout:60000}), tv.getByRole('button', {name:/Make the City video/}).click()]);
+  const csize = (await import('node:fs')).statSync(await cfilm.path()).size;
+  check(/-city-.*\.(mp4|webm)$/.test(cfilm.suggestedFilename()) && csize > 10000, 'Make the City video records the tour and saves it (' + cfilm.suggestedFilename() + ', ' + Math.round(csize / 1024) + ' KB)');
+  await tv.locator('.vstage').waitFor({state:'detached', timeout:10000});
+  await tv.getByRole('button', {name:'Drone tour'}).click();
   await tv.getByRole('button', {name:'Dashboard'}).click();
   check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden() && await tv.locator('.tvrace').isHidden() && await tv.locator('.tvcity').isHidden(), 'Dashboard goes back to the live and sales view');
   await tv.getByRole('button', {name:'Exit TV'}).click();

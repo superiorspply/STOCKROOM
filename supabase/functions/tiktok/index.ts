@@ -405,8 +405,11 @@ async function fillCity(admin: any, link: any, n: number, budgetMs: number) {
   const started = Date.now();
   await freshToken(admin, link);
   const want = cityDays(n);
-  const { data: have } = await admin.from("tiktok_city_days").select("day, filled_at").eq("company_id", link.company_id).gte("day", want[want.length - 1]);
-  const at = new Map((have || []).map((r: { day: string; filled_at: string }) => [String(r.day).slice(0, 10), Date.parse(r.filled_at)]));
+  const { data: have } = await admin.from("tiktok_city_days").select("day, filled_at, orders").eq("company_id", link.company_id).gte("day", want[want.length - 1]);
+  // A day on record with no orders at all is read again after 6 hours, in case it was added up when TikTok
+  // returned nothing (an empty day is quick to read).
+  const at = new Map((have || []).filter((r: { orders: number; filled_at: string }) => Number(r.orders) > 0 || Date.now() - Date.parse(r.filled_at) < 6 * 3600_000)
+    .map((r: { day: string; filled_at: string }) => [String(r.day).slice(0, 10), Date.parse(r.filled_at)]));
   const todo = want.filter((d, i) => !at.has(d) || (i < 2 && Date.now() - (at.get(d) as number) > (i ? 20 : 4) * 60_000));
   let done = 0;
   for (const d of todo) {

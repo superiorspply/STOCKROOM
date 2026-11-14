@@ -5414,14 +5414,18 @@ function tvCity(T, tt){
       oldest = Math.min(oldest, at); first.set(k, Math.min(first.get(k) || Infinity, at));
       if (at < from) continue; const e = m.get(k) || {product:k, units:0, gmv:0, last:0, itemId:x.itemId||''}; e.units += x.qty||0; e.gmv += x.total||0; e.last = Math.max(e.last, at); m.set(k, e); }
     const now = Date.now();
-    for (const e of m.values()){ const f = first.get(e.product); e.isNew = now - f < 7*DAY && f - oldest > 3*DAY; e.stale = now - e.last > quiet()*DAY; e.quietDays = Math.floor((now - e.last)/DAY);
+    for (const e of m.values()){ const f = first.get(e.product); e.isNew = now - f < 7*DAY && f - oldest > 14*DAY; e.stale = now - e.last > quiet()*DAY; e.quietDays = Math.floor((now - e.last)/DAY);
       const it = e.itemId && state.items.find(i=>i.id===e.itemId); e.image = it && it.photoId ? photoSrc(it.photoId) : ''; }
-    return [...m.values()].sort((a,b)=>b.units-a.units).slice(0, 36);
+    const out = [...m.values()].sort((a,b)=>b.units-a.units).slice(0, 36);
+    if (out.filter(p=>p.isNew).length > Math.max(2, out.length*0.3)) for (const p of out) p.isNew = false;
+    return out;
   };
   const flagTk = (list, filledFrom)=>{ const today = dayStr(Date.now());
     for (const p of list){ const f = p.first_day && String(p.first_day).slice(0,10), l = p.last_day && String(p.last_day).slice(0,10), ff = filledFrom && String(filledFrom).slice(0,10);
       p.isNew = !!(f && ff && daysApart(f, today) <= 7 && daysApart(ff, f) >= 3);
       p.quietDays = l ? daysApart(l, today) : 0; p.stale = !!l && p.quietDays >= quiet(); }
+    // A city where most products look new means the earlier days aren't on record yet, not a wave of launches.
+    if (list.filter(p=>p.isNew).length > Math.max(2, list.length*0.3)) for (const p of list) p.isNew = false;
     return list; };
   async function load(){
     C.ws = wholesale();

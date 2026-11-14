@@ -514,6 +514,10 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .tvcity .hud h3{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:6vh;letter-spacing:-.02em;line-height:1}
 #tv .tvcity .hud p{margin:.8vh 0 0;font-size:2.2vh;color:#c3c3cc}
 #tv .tvcity .hud p.wx{font-size:1.8vh;color:#ffd68a}
+#tv .tvcity[data-drive="1"] .hud{display:none}
+#tv .tvcity .drv{position:absolute;left:50%;bottom:3vh;transform:translateX(-50%);text-align:center;background:rgba(5,5,10,.6);border:1px solid #27272e;border-radius:2vh;padding:1vh 2vw;color:#fff;font-size:2vh;pointer-events:none}
+#tv .tvcity .drv b{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:6vh;line-height:1}
+#tv .tvcity .drv small{display:block;font-size:1.5vh;color:#c3c3cc;margin-top:.4vh}
 #tv .tvcity .cctl .cvid{background:#e5192b;color:#fff;border-color:#e5192b;font-weight:700}
 #tv .tvcity .hud .dist{display:flex;gap:2vw;margin-top:1.4vh;font-size:1.9vh;color:#c3c3cc}
 #tv .tvcity .hud .dist i{display:inline-block;width:1.2vh;height:1.2vh;border-radius:.3vh;margin-right:.5vw;vertical-align:middle}
@@ -5398,10 +5402,96 @@ function tvCity(T, tt){
   const dayBtns = [7,30,90].map(d=>h('button',{type:'button','aria-pressed':String(C.days===d),onclick:()=>{ C.days = d; try { localStorage.setItem('ss_tvcitydays', String(d)); } catch(e){} dayBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String([7,30,90][i]===d))); load(); }}, d+' days'));
   const tourBtn = h('button',{type:'button','aria-pressed':'false',onclick:()=>setTour(!C.tour)}, 'Drone tour');
   const vidBtn = h('button',{type:'button',class:'cvid',onclick:()=>makeVideo()}, '🎬 Make the City video');
-  const el = h('div',{class:'tvcity'}, h('div',{class:'hud'}, title, sub, wxEl, dist), h('div',{class:'cctl'}, ...dayBtns, tourBtn, vidBtn), msg);
+  const driveBtn = h('button',{type:'button','aria-pressed':'false',onclick:()=>setDrive(!D.on)}, 'Drive');
+  const teamBtn = h('button',{type:'button',onclick:()=>{ const v = window.prompt('Names for the people in the city, separated by commas (leave empty to use your employees):', teamNames(true).join(', ')); if (v===null) return;
+    try { localStorage.setItem('ss_tvcityteam', v.trim()); } catch(e){} C.sig = C.names = null; build(); }}, 'Team…');
+  const mph = h('b',{}, '0'), drv = h('div',{class:'drv',hidden:true}, mph, h('span',{}, ' mph'), h('small',{}, 'Arrow keys or W A S D to drive · Space to brake · a game controller works too'));
+  const el = h('div',{class:'tvcity'}, h('div',{class:'hud'}, title, sub, wxEl, dist), h('div',{class:'cctl'}, ...dayBtns, tourBtn, driveBtn, teamBtn, vidBtn), msg, drv);
+  // The people in the city: the names typed under Team…, else the active employees' first names, else a crew of three.
+  const teamNames = raw=>{ let v = ''; try { v = localStorage.getItem('ss_tvcityteam') || ''; } catch(e){}
+    const typed = v.split(',').map(x=>x.trim()).filter(Boolean); if (typed.length || raw) return typed.slice(0, 10);
+    const emps = (state.employees||[]).filter(e=>e.active!==false && e.name).map(e=>String(e.name).trim().split(/\s+/)[0]).slice(0, 8);
+    return emps.length ? emps : ['Crew','Crew','Crew']; };
+  const snap = v=>Math.round((v - 6.5)/13)*13 + 6.5;   // the nearest road
+  // Driving: a low green supercar, seen from behind.
+  const D = {on:false, x:0, z:0, a:-Math.PI/2, v:0, keys:{}};
+  C.D = D;
+  const onKeyD = e=>{ const k = e.key.length===1 ? e.key.toLowerCase() : e.key; if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','w','a','s','d'].includes(k)) return; D.keys[k] = true; e.preventDefault(); };
+  const onKeyU = e=>{ const k = e.key.length===1 ? e.key.toLowerCase() : e.key; D.keys[k] = false; };
+  function setDrive(on){
+    const K = C.three; if (!K) return;
+    D.on = on; driveBtn.setAttribute('aria-pressed', String(on)); drv.hidden = !on; el.dataset.drive = on ? '1' : ''; D.keys = {};
+    if (on){ setTour(false); if (!K.car) K.scene.add(K.car = sportsCar(K.THREE));
+      D.x = snap(26); D.z = snap((C.wh ? C.wh.z : 60) + 26);   // on the street beside the warehouse, facing the city D.a = -Math.PI/2; D.v = 0; K.car.visible = true; D.cam = null;
+      window.addEventListener('keydown', onKeyD); window.addEventListener('keyup', onKeyU);
+      if (T.sound && !D.ac){ try { D.ac = new (window.AudioContext || window.webkitAudioContext)(); D.osc = D.ac.createOscillator(); D.osc.type = 'sawtooth'; D.lp = D.ac.createBiquadFilter(); D.lp.type = 'lowpass'; D.gn = D.ac.createGain(); D.gn.gain.value = 0.035;
+        D.osc.connect(D.lp).connect(D.gn).connect(D.ac.destination); D.osc.start(); } catch(e){} } }
+    else { if (K.car) K.car.visible = false; window.removeEventListener('keydown', onKeyD); window.removeEventListener('keyup', onKeyU);
+      if (D.ac){ try { D.osc.stop(); D.ac.close(); } catch(e){} D.ac = null; } }
+  }
+  function sportsCar(THREE){
+    const g = new THREE.Group(), paint = new THREE.MeshStandardMaterial({color:0x8fe000, emissive:0x8fe000, emissiveIntensity:0.28, metalness:0.55, roughness:0.3}), dark = new THREE.MeshStandardMaterial({color:0x07080b, roughness:0.4, metalness:0.4});
+    const box = (w,hh,d,x,y,z,m,rz)=>{ const b = new THREE.Mesh(new THREE.BoxGeometry(w,hh,d), m); b.position.set(x,y,z); if (rz) b.rotation.z = rz; g.add(b); return b; };
+    box(4.5, 0.5, 2.05, 0, 0.52, 0, paint);                 // body
+    box(1.7, 0.3, 1.95, 1.75, 0.6, 0, paint, -0.16);        // the low wedge nose
+    box(1.9, 0.46, 1.55, -0.2, 0.98, 0, dark);              // cabin
+    box(0.9, 0.3, 1.5, 0.95, 0.9, 0, dark, -0.45);          // windscreen
+    box(1.5, 0.3, 1.9, -1.45, 0.9, 0, paint, 0.1);          // engine deck
+    box(0.55, 0.08, 2.25, -2.2, 1.5, 0, dark); box(0.1, 0.5, 0.1, -2.1, 1.22, 0.75, dark); box(0.1, 0.5, 0.1, -2.1, 1.22, -0.75, dark);   // the big rear wing
+    box(0.9, 0.12, 2.2, 2.1, 0.3, 0, dark);                 // front splitter
+    for (const [x,z] of [[1.45,1.02],[1.45,-1.02],[-1.45,1.04],[-1.45,-1.04]]){ const w = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.36, 18), dark); w.rotation.x = Math.PI/2; w.position.set(x, 0.44, z); g.add(w); }
+    const white = new THREE.MeshBasicMaterial({color:0xffffff}), red = new THREE.MeshBasicMaterial({color:0xff1a1a});
+    box(0.1, 0.1, 0.5, 2.5, 0.58, 0.7, white); box(0.1, 0.1, 0.5, 2.5, 0.58, -0.7, white); box(0.08, 0.1, 1.9, -2.27, 0.72, 0, red);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 3), new THREE.MeshBasicMaterial({color:0x8fe000, transparent:true, opacity:0.3, blending:THREE.AdditiveBlending, depthWrite:false})); glow.rotation.x = -Math.PI/2; glow.position.y = 0.09; g.add(glow);
+    const lamp = new THREE.PointLight(0xfff1cc, 1.1, 46); lamp.position.set(5, 2, 0); g.add(lamp);
+    return g;
+  }
+  function driveStep(dt, camera){
+    const K = C.three, k = D.keys; let gas = (k.ArrowUp || k.w ? 1 : 0) - (k.ArrowDown || k.s ? 1 : 0), steer = (k.ArrowRight || k.d ? 1 : 0) - (k.ArrowLeft || k.a ? 1 : 0), brake = !!k[' '];
+    try { const gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(Boolean);
+      if (gp){ if (Math.abs(gp.axes[0]) > 0.15) steer = gp.axes[0]; const r = gp.buttons[7] ? gp.buttons[7].value : 0, l = gp.buttons[6] ? gp.buttons[6].value : 0; if (r > 0.05 || l > 0.05) gas = r - l; if (gp.buttons[0] && gp.buttons[0].pressed) brake = true; } } catch(e){}
+    if (gas > 0) D.v += dt*(D.v < 0 ? 60 : 26)*gas; else if (gas < 0) D.v += dt*(D.v > 0 ? 55 : 14)*gas;
+    D.v -= D.v*dt*(brake ? 3.2 : 0.35); D.v = Math.max(-16, Math.min(66, D.v)); if (Math.abs(D.v) < 0.05 && !gas) D.v = 0;
+    D.a += steer*dt*1.7*Math.max(-1, Math.min(1, D.v/14));
+    const nx = D.x + Math.cos(D.a)*D.v*dt, nz = D.z + Math.sin(D.a)*D.v*dt;
+    const hit = (x, z)=>(C.blocks||[]).some(b=>Math.abs(x - b.x) < b.hw + 1 && Math.abs(z - b.z) < b.hd + 1);
+    if (Math.abs(nx) > 900 || Math.abs(nz) > 900 || hit(nx, nz)){ if (!hit(nx, D.z) && Math.abs(nx) <= 900) D.x = nx; else if (!hit(D.x, nz) && Math.abs(nz) <= 900) D.z = nz; D.v *= -0.25; D.bumps = (D.bumps||0) + 1; }
+    else { D.x = nx; D.z = nz; }
+    K.car.position.set(D.x, 0, D.z); K.car.rotation.y = -D.a; K.car.rotation.z = -steer*Math.min(1, Math.abs(D.v)/40)*0.05;
+    const back = 12 + Math.abs(D.v)*0.07, want = new K.THREE.Vector3(D.x - Math.cos(D.a)*back, 4.6 + Math.abs(D.v)*0.02, D.z - Math.sin(D.a)*back);
+    if (!D.cam) D.cam = want.clone(); else D.cam.lerp(want, 1 - Math.exp(-dt*5));
+    camera.position.copy(D.cam); camera.lookAt(D.x + Math.cos(D.a)*9, 2.2, D.z + Math.sin(D.a)*9);
+    mph.textContent = String(Math.round(Math.abs(D.v)*3.3));
+    if (D.ac){ const t = D.ac.currentTime; D.osc.frequency.setTargetAtTime(48 + Math.abs(D.v)*3.4, t, 0.08); D.lp.frequency.setTargetAtTime(260 + Math.abs(D.v)*34, t, 0.08); }
+  }
+  // The warehouse: where every order's box is loaded onto its truck.
+  function warehouse(THREE, city, wz){
+    const g = new THREE.Group(); g.position.set(0, 0, wz);
+    const wall = new THREE.MeshStandardMaterial({color:0x2a2f3a, roughness:0.8, emissive:0x1a1d24, emissiveIntensity:0.6});
+    const hall = new THREE.Mesh(new THREE.BoxGeometry(40, 9, 20), wall); hall.position.y = 4.5; g.add(hall);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(41, 0.8, 21), new THREE.MeshBasicMaterial({color:0xe5192b})); roof.position.y = 9.4; g.add(roof);
+    for (let i=0;i<4;i++){ const door = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial({color:i===3 ? 0xffd68a : 0x12151c})); door.position.set(-13 + i*8.6, 2.6, 10.06); g.add(door); }
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d'); x.fillStyle = '#0b0c10'; x.fillRect(0,0,512,96); x.fillStyle = '#fff'; x.font = '800 54px system-ui, sans-serif'; x.textAlign = 'center';
+    const nm = BRAND().toUpperCase(); x.fillText(nm.length > 14 ? 'WAREHOUSE' : nm, 256, 66);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(22, 4.1), new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c)})); sign.position.set(0, 12.2, 10.1); g.add(sign);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(22.6, 4.7, 0.4), new THREE.MeshBasicMaterial({color:0xe5192b})); post.position.set(0, 12.2, 9.8); g.add(post);
+    city.add(g);
+    return {x:0, z:wz, dock:new THREE.Vector3(12.8, 1.4, wz + 10.4), bay:new THREE.Vector3(12.8, 1.1, wz + 16)};
+  }
+  function person(THREE, name, n){
+    const g = new THREE.Group(), cols = [0xe5192b, 0x36c5f0, 0xffc233, 0x3ddc97, 0xff7ad9, 0xa78bfa, 0xff8a3d, 0xffffff];
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.9, 2.3, 10), new THREE.MeshBasicMaterial({color:cols[n % cols.length]})); body.position.y = 1.5; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.72, 12, 10), new THREE.MeshBasicMaterial({color:0xf2c9a0})); head.position.y = 3.25; g.add(head);
+    const c = document.createElement('canvas'); c.width = 256; c.height = 80; const x = c.getContext('2d');
+    x.fillStyle = 'rgba(5,5,10,.78)'; x.beginPath(); x.roundRect ? x.roundRect(4,4,248,72,22) : x.rect(4,4,248,72); x.fill(); x.fillStyle = '#fff'; x.font = '700 44px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText(name.length > 9 ? name.slice(0,8)+'…' : name, 128, 56);
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), depthTest:false, transparent:true, fog:false})); tag.scale.set(8.5, 2.65, 1); tag.position.y = 6.2; tag.renderOrder = 150; g.add(tag);
+    return g;
+  }
+  // Sends a person along the roads to a spot: across to its street, then down it.
+  const walkTo = (p, x, z, run)=>{ const tx = snap(x), tz = snap(z); p.path = [{x:tx, z:p.g.position.z}, {x:tx, z:tz}]; p.run = !!run; p.wait = 0; };
   el._city = C;   // for tests
   const say = t=>{ msg.textContent = t; msg.hidden = !t; };
-  const setTour = on=>{ C.tour = on; C.tourAt = performance.now(); tourBtn.setAttribute('aria-pressed', String(on)); el.dataset.tour = on ? '1' : ''; };
+  const setTour = on=>{ if (on && D.on) setDrive(false); C.tour = on; C.tourAt = performance.now(); tourBtn.setAttribute('aria-pressed', String(on)); el.dataset.tour = on ? '1' : ''; };
   const forced = k=>{ try { return (localStorage.getItem('ss_tvcitywx')||'').split(',').includes(k); } catch(e){ return false; } };   // for tests and screenshots
   const dayStr = ms=>new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(ms);
   const daysApart = (a, b)=>Math.round((Date.parse(b+'T12:00:00Z') - Date.parse(a+'T12:00:00Z'))/DAY);
@@ -5489,7 +5579,7 @@ function tvCity(T, tt){
     C.names = names;
     const {THREE, city} = K;
     while (city.children.length) city.remove(city.children[0]);
-    C.bld.clear(); C.cars = C.cars.filter(c=>{ if (c.order) return false; return true; });
+    C.bld.clear(); C.cars = C.cars.filter(c=>{ if (c.order) return false; return true; }); C.people = [];
     const named = [...C.tk, ...C.ws].some(p=>/squish/i.test(p.product));
     title.textContent = named ? 'Squishy City' : BRAND()+' City';
     hud();
@@ -5530,19 +5620,20 @@ function tvCity(T, tt){
     };
     const off = Math.max(60, Math.ceil(Math.sqrt(Math.max(C.tk.length, C.ws.length)))*7 + 20);
     C.off = off;
+    const wz = Math.ceil((off*0.9 + 24)/13)*13;   // the warehouse sits in front of the districts
     district(C.tk, C.ws.length ? -off : 0, '#ff6b74', 0xff3b4a, 'tk');
     district(C.ws, C.tk.length ? off : 0, '#7fd8ff', 0x36c5f0, 'ws');
     // The rest of the city: a skyline of darker buildings around the districts, on a grid of glowing roads.
     if (!K.skyline){
-      K.skyline = new THREE.Group(); K.scene.add(K.skyline); K.skyMats = [];
+      K.skyline = new THREE.Group(); K.scene.add(K.skyline); K.skyMats = []; K.skyBlocks = [];
       const tex = windowTex(THREE, '#9aa6c8'), occupied = (x, z)=>Math.abs(z) < off*0.9 && Math.abs(Math.abs(x) - (C.ws.length && C.tk.length ? off : 0)) < off*0.9;
       for (let i=-14;i<=14;i++) for (let j=-14;j<=14;j++){
-        const x = i*13, z = j*13; if (occupied(x, z) || Math.random() < 0.35) continue;
+        const x = i*13, z = j*13; if (occupied(x, z) || (Math.abs(x) < 30 && Math.abs(z - wz) < 24) || Math.random() < 0.35) continue;
         const d = Math.hypot(x, z), hh = 3 + Math.random()*Math.max(4, 34 - d/9);
         const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(1, Math.max(1, Math.round(hh/12)));
         const mm = new THREE.MeshStandardMaterial({color:0x0c0f18, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.32, roughness:0.8}); K.skyMats.push(mm);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(6 + Math.random()*2.4, hh, 6 + Math.random()*2.4), mm);
-        m.position.set(x + (Math.random()-0.5)*2, hh/2, z + (Math.random()-0.5)*2); K.skyline.add(m);
+        const bw = 6 + Math.random()*2.4, bd = 6 + Math.random()*2.4, m = new THREE.Mesh(new THREE.BoxGeometry(bw, hh, bd), mm);
+        m.position.set(x + (Math.random()-0.5)*2, hh/2, z + (Math.random()-0.5)*2); K.skyline.add(m); K.skyBlocks.push({x:m.position.x, z:m.position.z, hw:bw/2, hd:bd/2});
       }
       K.roadMat = new THREE.MeshBasicMaterial({color:0x2a3550, transparent:true, opacity:0.55});
       for (let i=-14;i<=14;i++){
@@ -5550,6 +5641,10 @@ function tvCity(T, tt){
         const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 380), K.roadMat); b.rotation.x = -Math.PI/2; b.position.set(i*13 + 6.5, 0.06, 0); K.skyline.add(b);
       }
     }
+    C.wh = warehouse(THREE, city, wz);
+    teamNames().forEach((name, n)=>{ const g = person(THREE, name, n); g.position.set(snap(-26 + n*13), 0, snap(wz + 26)); city.add(g); C.people.push({g, name, path:[], wait:1 + n*0.7, run:false, ph:n}); });
+    // What the car can't drive through: the towers, the skyline and the warehouse.
+    C.blocks = [...[...C.bld.values()].map(b=>({x:b.g.position.x, z:b.g.position.z, hw:b.w/2, hd:b.w/2})), ...(K.skyBlocks||[]), {x:0, z:wz, hw:20, hd:10}];
     const tallest = Math.max(30, ...[...C.bld.values()].map(b=>b.g.userData.h));
     C.radius = Math.max(150, off*1.5 + tallest*1.1);
     C.look = Math.min(40, tallest*0.38);
@@ -5573,7 +5668,7 @@ function tvCity(T, tt){
   function truck(fromKey, stateName){
     const K = C.three; if (!K) return;
     const b = C.bld.get(fromKey); const {THREE, city} = K;
-    const start = b ? b.g.position.clone() : new THREE.Vector3(0,0,0); start.y = 1.1;
+    const start = C.wh ? C.wh.bay.clone() : b ? b.g.position.clone() : new THREE.Vector3(0,0,0); start.y = 1.1;
     let a = Math.random()*Math.PI*2, ab = '';
     const G = window.STOCKROOM_GEO;
     if (G && stateName){ ab = G.names[String(stateName).toLowerCase()] || String(stateName).toUpperCase(); const p = G.st[ab], hm = tvHome();
@@ -5582,6 +5677,9 @@ function tvCity(T, tt){
     const m = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.2, 1.8), new THREE.MeshBasicMaterial({color:b ? b.glow : 0xffd68a}));
     m.position.copy(start); m.lookAt(end); m.rotateY(Math.PI/2); city.add(m);
     const car = {m, start, end, t:0, speed:0.1, order:true};
+    if (C.wh){ car.wait = 0.9 + Math.random()*0.5; car.wait0 = car.wait; car.box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshBasicMaterial({color:0xc98f4e})); car.box.position.copy(C.wh.dock); city.add(car.box); C.loaded = (C.loaded||0) + 1; }
+    // Someone on the team runs to the tower that just sold.
+    if (b && C.people && C.people.length){ const free = C.people.filter(p=>!p.run); const p = (free.length ? free : C.people)[Math.floor(Math.random()*(free.length || C.people.length))]; walkTo(p, b.g.position.x + 6.5, b.g.position.z + 6.5, true); C.runs = (C.runs||0) + 1; }
     if (ab && ab.length <= 3){ car.tag = plate(THREE, ab); car.tag.position.copy(start); car.tag.position.y = 6; city.add(car.tag); car.ab = ab; }
     C.cars.push(car);
     if (b){ b.pulse = 1; }
@@ -5771,6 +5869,7 @@ function tvCity(T, tt){
         if (showing && now - slowTick > 4000){ slowTick = now; daylight(); weather(); }
         // Camera.
         if (C.rec) tourCam(camera, C.rec.f());
+        else if (D.on) driveStep(dt, camera);
         else if (C.tour) tourCam(camera, ((now - C.tourAt)/1000 % 70)/70);
         else { if (!C.drag && Date.now() - C.idleAt > 6000) C.ang += dt*0.06;
           const R = (C.radius||220) * (C.zoom||1), hgt = C.hgt || 0.45;
@@ -5790,7 +5889,17 @@ function tvCity(T, tt){
           g.material.emissiveIntensity = b.dark ? 0.03 : (b.lit === undefined ? 0.9 : b.lit) + b.pulse*1.6;
         }
         // Traffic.
-        C.cars = C.cars.filter(c=>{ c.t += dt*c.speed; c.m.position.lerpVectors(c.start, c.end, c.t); if (c.tag){ c.tag.position.set(c.m.position.x, 6.5, c.m.position.z); }
+        for (const p of C.people||[]){
+          if (p.path.length){ const w = p.path[0], dx = w.x - p.g.position.x, dz = w.z - p.g.position.z, d = Math.hypot(dx, dz), step = dt*(p.run ? 19 : 4.5);
+            if (d <= step){ p.g.position.x = w.x; p.g.position.z = w.z; p.path.shift(); if (!p.path.length){ p.wait = p.run ? 3 : 1 + Math.random()*4; p.run = false; } }
+            else { p.g.position.x += dx/d*step; p.g.position.z += dz/d*step; }
+            p.g.position.y = Math.abs(Math.sin(clock*(p.run ? 14 : 7) + p.ph))*(p.run ? 0.7 : 0.3); }
+          else { p.g.position.y = 0; p.wait -= dt; if (p.wait <= 0){ const bs = [...C.bld.values()], b = bs[Math.floor(Math.random()*Math.min(bs.length, 14))];
+            if (b && Math.random() < 0.7) walkTo(p, b.g.position.x + 6.5, b.g.position.z + 6.5); else if (C.wh) walkTo(p, (Math.random()-0.5)*30, C.wh.z + 20); else p.wait = 2; } }
+        }
+        C.cars = C.cars.filter(c=>{
+          if (c.wait > 0){ c.wait -= dt; const u = 1 - Math.max(0, c.wait)/c.wait0; if (c.box){ c.box.position.lerpVectors(C.wh ? C.wh.dock : c.start, c.start, u); c.box.position.y += Math.sin(u*Math.PI)*2.4; if (c.wait <= 0){ c.box.parent && c.box.parent.remove(c.box); c.box = null; } } return true; }
+          c.t += dt*c.speed; c.m.position.lerpVectors(c.start, c.end, c.t); if (c.tag){ c.tag.position.set(c.m.position.x, 6.5, c.m.position.z); }
           if (c.t >= 1){ c.m.parent && c.m.parent.remove(c.m); if (c.tag) c.tag.parent && c.tag.parent.remove(c.tag); return false; } return true; });
         const nowS = Date.now()/1000; let recent = 0; for (const o of T.orders.values()) if (nowS - o.t < 600) recent++;
         if (showing && Math.random() < dt*Math.min(9, 0.9 + recent*0.35)) ambient();
@@ -5847,7 +5956,7 @@ function tvCity(T, tt){
     }
     if (changed){ C.grown = (C.grown||0) + 1; C.tk.sort((a,b)=>b.units-a.units); hud(); }
   }
-  return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); if (C.rec){ try { C.rec = null; } catch(e){} } try { C.three && C.three.renderer.dispose(); } catch(e){} }};
+  return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ if (D.on) setDrive(false); cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); if (C.rec){ try { C.rec = null; } catch(e){} } try { C.three && C.three.renderer.dispose(); } catch(e){} }};
 }
 
 // The commentator: the Mac's own voice (speech synthesis, free) calls the action. One line at a time; a more

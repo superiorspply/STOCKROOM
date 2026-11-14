@@ -5024,7 +5024,7 @@ function tvMap(tt, T){
       h('div',{class:'g'}, h('b',{}, fmtN(deliv)), h('span',{},'Delivered today')),
       h('div',{}, h('b',{}, fmtN(byState.size)), h('span',{},'States today')));
     const top = [...byState.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
-    topStates.replaceChildren(...(top.length ? top.map(([k,n],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(n)))) : [h('div',{style:'color:#9a9aa6'}, M.loaded ? 'No orders yet today.' : 'Loading…')]));
+    topStates.replaceChildren(...(top.length ? top.map(([k,n],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(n)))) : [h('div',{style:'color:#9a9aa6'}, M.loaded ? 'No orders yet today.' : 'Loading today\u2019s orders… '+fmtN(M.orders.size))]));
   }
   function paint(){
     drawStats();
@@ -5048,7 +5048,7 @@ function tvMap(tt, T){
         M.orders.set(o.id, o); M.last = Math.max(M.last, o.ut || o.t);
       }
       token = r.next_page_token || '';
-      if (!M.loaded) drawStats();
+      if (!M.loaded) paint();   // draw as it loads, so the globe fills in page by page
     } while (token && ++guard < 100);
     M.loaded = true; paint();
   }

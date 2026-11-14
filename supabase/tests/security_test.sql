@@ -295,6 +295,19 @@ select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A
 select t.fails($$select public.tiktok_daily_sales((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load TikTok daily sales for A');
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 
+-- Squishy City: TikTok units per product per day.
+reset role;
+insert into public.tiktok_product_days(company_id, day, product, units, gmv) select v::uuid, current_date, 'Squishy Butter', 40, 400 from ids where k = 'A';
+insert into public.tiktok_city_days(company_id, day, orders) select v::uuid, current_date, 38 from ids where k = 'A';
+set role authenticated;
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select t.ok((select (r->'products'->0->>'units')::int = 40 and (r->>'days_filled')::int = 1 and (r->>'orders')::int = 38 from public.tiktok_city((select v::uuid from ids where k='A'), current_date - 7, current_date) r), 'owners can load the city''s product totals');
+select t.fails($$insert into public.tiktok_product_days(company_id, day, product) select v::uuid, current_date, 'X' from ids where k = 'A'$$, 'city totals cannot be written from the app');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.fails($$select public.tiktok_city((select v::uuid from ids where k='A'), current_date - 7, current_date)$$, 'another company cannot load A''s city');
+select t.ok(t.count('select * from public.tiktok_product_days') = 0, 'another company cannot read A''s city totals');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+
 -- Stockroom Operator (AI assistant).
 select t.ok((select not enabled and used = 0 from public.operator_status((select v::uuid from ids where k='A'))), 'the Operator starts switched off');
 select t.fails($$select public.operator_begin((select v::uuid from ids where k='A'))$$, 'the Operator cannot be used while switched off');

@@ -330,7 +330,8 @@ async function mockTikTok(req, res, url){
   if (path === '/order/202309/orders/search'){
     const b = JSON.parse(raw || '{}'), size = Math.min(100, +q.page_size || 20), from = +(q.page_token || 0);
     const byU = b.update_time_ge != null, key = byU ? 'update_time' : 'create_time', min = byU ? b.update_time_ge : (b.create_time_ge || 0);
-    const list = TT.orders.filter(o => o[key] >= min).sort((x, y) => y[key] - x[key]);
+    const max = byU ? Infinity : (b.create_time_lt ?? Infinity), asc = q.sort_order === 'ASC';
+    const list = TT.orders.filter(o => o[key] >= min && o[key] < max).sort((x, y) => asc ? x[key] - y[key] : y[key] - x[key]);
     const page = list.slice(from, from + size);
     return send(res, 200, {code:0, data:{orders:page, total_count:list.length, next_page_token:from + size < list.length ? String(from + size) : ''}});
   }

@@ -301,6 +301,8 @@ const runtime = {
       finish: p => call({action:'finish', code:p.code, state:p.state}),
       sync: () => call({action:'sync'}),
       // Orders placed since `since` (ms), newest first: {orders:[{id, t, status, gmv, paid, items}], next_page_token}.
+      // Squishy City: each product's TikTok units over the last `days` days; {products, days_filled, missing, ...}.
+      city: days => call({action:'city', days}),
       // by 'update': orders changed since then (shipped, delivered), for the TV order map.
       orders: (since, pageToken, by) => call({action:'orders', since:Math.floor((since || 0) / 1000), page_token:pageToken || '', by:by || ''}),
       async disconnect(){ const {error} = await sb.rpc('tiktok_disconnect', {cid:S.company.id}); if (error) throw appError(error); },

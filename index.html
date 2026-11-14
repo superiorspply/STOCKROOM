@@ -495,6 +495,7 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 @keyframes gallop{from{transform:translateY(-.5vh) rotate(-4deg)}to{transform:translateY(.5vh) rotate(4deg)}}
 #tv .winner{position:absolute;inset:0;display:grid;place-items:center;background:rgba(5,5,6,.82);z-index:5;text-align:center;animation:tvpop2 .5s ease-out}
 #tv .winner .w{display:grid;gap:1.6vh;justify-items:center}
+#tv .runner .av.pic,#tv .winner .av.pic{background:#2a2a31 center/cover no-repeat}
 #tv .winner .av{width:22vh;height:22vh;border-radius:50%;background:linear-gradient(160deg,#e5192b,#7a0d17);border:1vh solid #ffb84d;box-shadow:0 0 8vh rgba(255,184,77,.5);display:grid;place-items:center;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-weight:800;font-size:9vh}
 #tv .winner h2{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:7vh;letter-spacing:-.02em}
 #tv .winner p{margin:0;font-size:2.6vh;color:#c3c3cc}
@@ -5126,14 +5127,17 @@ function tvMap(tt, T){
 // the clock hour, a 15-minute sprint, or a LIVE race started and finished by hand. The leader sits near the
 // line, the rest in proportion; at the end the winning state crosses it and gets a winner screen.
 function tvRace(T, talk){
-  const R = {mode:'hour', start:0, end:0, leader:'', lastNames:[], over:null};
+  const R = {mode:'hour', kind:'states', start:0, end:0, leader:'', lastNames:[], over:null};
   try { const m = localStorage.getItem('ss_tvrace'); if (['hour','sprint','live'].includes(m)) R.mode = m; } catch(e){}
+  try { const k = localStorage.getItem('ss_tvracekind'); if (k==='products') R.kind = k; } catch(e){}
+  // What races: US states (each order moves its state) or products (each item sold moves its product).
+  const kindBtns = [['states','States'],['products','Products']].map(([k,l])=>{ const b = h('button',{type:'button','aria-pressed':String(R.kind===k),onclick:()=>{ R.kind = k; try { localStorage.setItem('ss_tvracekind', k); } catch(e){} kindBtns.forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.k===k))); track.replaceChildren(); lanes.clear(); R.leader = ''; R.lastNames = []; paint(); }}, l); b.dataset.k = k; return b; });
   const title = h('h3',{}), sub = h('div',{class:'sub'}), clockEl = h('div',{class:'rclock'});
   const modeBtns = [['hour','Hourly race'],['sprint','15-min sprint'],['live','LIVE race']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(R.mode===k),onclick:()=>{ R.mode = k; try { localStorage.setItem('ss_tvrace', k); } catch(e){} modeBtns.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.k===k))); begin(true); }}, l));
   modeBtns.forEach((b,i)=>b.dataset.k = ['hour','sprint','live'][i]);
   const finishBtn = h('button',{type:'button',onclick:()=>{ if (R.mode==='live') finish(); }},'Finish race');
   const track = h('div',{class:'track'});
-  const el = h('div',{class:'tvrace'}, h('div',{class:'rhead'}, h('div',{}, title, sub, h('div',{class:'rmodes'}, ...modeBtns, finishBtn)), clockEl), track);
+  const el = h('div',{class:'tvrace'}, h('div',{class:'rhead'}, h('div',{}, title, sub, h('div',{class:'rmodes'}, ...kindBtns, h('span',{style:'width:1.2vw'}), ...modeBtns, finishBtn)), clockEl), track);
   const lanes = new Map();
   const slot = ms => R.mode==='sprint' ? 15*60000 : 3600000;
   function begin(announce){
@@ -5149,7 +5153,18 @@ function tvRace(T, talk){
   const stateOf = o => { const n = String(o.state||'').trim(); if (!n) return null; const G = window.STOCKROOM_GEO;
     const ab = G ? (G.names[n.toLowerCase()] || (n.length===2 ? n.toUpperCase() : '')) : (n.length===2 ? n.toUpperCase() : '');
     return {name:n.length===2 && G ? (Object.keys(G.names).find(k=>G.names[k]===ab) || n).replace(/\b\w/g, c=>c.toUpperCase()) : n.replace(/\b\w/g, c=>c.toUpperCase()), ab:ab || n.slice(0,2).toUpperCase()}; };
+  function productStandings(){
+    const m = new Map();
+    for (const o of T.orders.values()){ if (!counted(o) || o.t*1000 < R.start || o.t*1000 >= R.end) continue;
+      for (const l of o.items){ const k = l.name || 'Item'; const e = m.get(k) || {name:k, n:0, rev:0, img:l.image || ''}; e.n++; e.rev += l.price; if (!e.img && l.image) e.img = l.image; m.set(k, e); } }
+    let list = [...m.values()].sort((a,b)=>b.n-a.n || b.rev-a.rev);
+    // Before anything sells, line up today's best sellers at the start.
+    if (list.length < 3){ const day = new Map(); for (const o of T.orders.values()) if (counted(o)) for (const l of o.items){ const e = day.get(l.name) || {name:l.name, img:l.image||'', d:0}; e.d++; day.set(l.name, e); }
+      for (const e of [...day.values()].sort((a,b)=>b.d-a.d)) if (list.length < 6 && !list.some(x=>x.name===e.name)) list.push({name:e.name, n:0, rev:0, img:e.img}); }
+    return list.slice(0, 7);
+  }
   function standings(){
+    if (R.kind==='products') return productStandings();
     const m = new Map();
     for (const o of T.orders.values()){ if (!counted(o) || o.t*1000 < R.start || o.t*1000 >= R.end) continue;
       const st = stateOf(o); if (!st) continue;
@@ -5165,19 +5180,19 @@ function tvRace(T, talk){
     const list = standings(), top = list[0] ? list[0].n : 0, scale = Math.max(top*1.12, 8);
     title.textContent = R.mode==='live' ? 'The LIVE Race' : R.mode==='sprint' ? 'The '+hourLabel(R.start)+' Sprint' : 'The '+hourLabel(R.start)+' Race';
     const total = list.reduce((a,e)=>a+e.n,0);
-    sub.textContent = fmtN(total)+' order'+(total===1 ? '' : 's')+' this race · every order moves its state forward';
+    sub.textContent = R.kind==='products' ? fmtN(total)+' sold this race · every sale moves its product forward' : fmtN(total)+' order'+(total===1 ? '' : 's')+' this race · every order moves its state forward';
     const seen = new Set();
     list.forEach((e,i)=>{
       seen.add(e.name);
       let L = lanes.get(e.name);
       if (!L){
-        const av = h('div',{class:'av'}, e.ab);
+        const av = h('div',{class:'av'+(e.img ? ' pic' : '')}, e.img ? '' : (e.ab || (e.name||'?').slice(0,1).toUpperCase())); if (e.img) av.style.backgroundImage = 'url("'+e.img.replace(/"/g,'')+'")';
         const nm = h('b',{}, e.name), ct = h('span',{}), rk = h('span',{class:'rank'});
         const runner = h('div',{class:'runner'}, rk, av, h('div',{class:'tag'}, nm, ct));
         L = {lane:h('div',{class:'lane'}, runner), runner, ct, rk}; lanes.set(e.name, L);
       }
       track.append(L.lane);   // keeps lanes in standing order
-      L.rk.textContent = String(i+1); L.ct.textContent = fmtN(e.n)+' order'+(e.n===1 ? '' : 's');
+      L.rk.textContent = String(i+1); L.ct.textContent = R.kind==='products' ? fmtN(e.n)+' sold' : fmtN(e.n)+' order'+(e.n===1 ? '' : 's');
       L.runner.classList.toggle('lead', i===0 && e.n>0);
       const pos = Math.min(0.86, e.n/scale);
       L.runner.style.left = 'calc(2vw + '+(pos*100).toFixed(2)+'% - '+(pos*22).toFixed(2)+'vw)';
@@ -5191,8 +5206,8 @@ function tvRace(T, talk){
     const list = standings(); const w = list[0];
     if (!w || !w.n){ begin(false); return; }
     const L = lanes.get(w.name); if (L) L.runner.style.left = 'calc(100% - 22vw)';
-    R.over = h('div',{class:'winner'}, h('div',{class:'w'}, h('div',{class:'av'}, w.ab),
-      h('h2',{}, '🏆 '+w.name+' wins!'), h('p',{}, fmtN(w.n)+' orders'+(list[1] && list[1].n ? ' · '+list[1].name+' second with '+fmtN(list[1].n) : '')+' · '+money(round2(w.rev)))));
+    R.over = h('div',{class:'winner'}, h('div',{class:'w'}, h('div',{class:'av'+(w.img ? ' pic' : ''),style:w.img ? 'background-image:url("'+w.img.replace(/"/g,'')+'")' : ''}, w.img ? '' : (w.ab || w.name.slice(0,1))),
+      h('h2',{}, '🏆 '+w.name+' wins!'), h('p',{}, fmtN(w.n)+(R.kind==='products' ? ' sold' : ' orders')+(list[1] && list[1].n ? ' · '+list[1].name+' second with '+fmtN(list[1].n) : '')+' · '+money(round2(w.rev)))));
     el.append(R.over);
     talk.say(pick(['And at the line… it’s '+w.name+'! '+w.n+' orders this race!', w.name+' wins it! What a race! '+w.n+' orders!', 'Photo finish… and the winner is '+w.name+'!']), 3);
     setTimeout(()=>begin(true), 9000);
@@ -5206,7 +5221,7 @@ function tvRace(T, talk){
   function onOrders(nf){
     if (R.over) return;
     const r = paint();
-    for (const o of nf){ const st = stateOf(o); if (st) R.lastNames.push(st.name); }
+    for (const o of nf){ if (R.kind==='products') for (const l of o.items) R.lastNames.push(l.name); else { const st = stateOf(o); if (st) R.lastNames.push(st.name); } }
     R.lastNames = R.lastNames.slice(-8);
     if (r.leader && r.was && r.leader!==r.was) talk.say(pick([r.leader+' takes the lead!', 'Oh! '+r.leader+' storms past '+r.was+'!', 'We have a new leader… '+r.leader+'!']), 2);
     else if (r.leader && !r.was) talk.say(pick([r.leader+' jumps out in front!', 'First blood to '+r.leader+'!']), 1);

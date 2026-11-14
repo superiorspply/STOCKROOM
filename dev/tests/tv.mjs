@@ -92,6 +92,10 @@ try {
   check(Object.keys(after).some(k => before[k] != null && after[k] > before[k] + 5) || Object.keys(after).some(k => before[k] == null), 'orders move their states forward (' + JSON.stringify(after).slice(0, 120) + ')');
   const said = await P.evaluate(() => window.__said);
   check(said.length >= 1, 'the commentator calls the action (' + said.slice(-3).join(' / ') + ')');
+  await tv.getByRole('button', {name:'Products', exact:true}).click();
+  const plane = await tv.locator('.tvrace .lane').allTextContents();
+  check(/Cloud Slime|Squishy Butter|Mega Squishy/.test(plane.join(' ')) && /sold this race/.test(await tv.locator('.tvrace .sub').textContent()), 'the race can be between products instead (' + plane.join(' | ').slice(0, 100) + ')');
+  await tv.getByRole('button', {name:'States', exact:true}).click();
   await tv.getByRole('button', {name:'LIVE race'}).click();
   check((await tv.locator('.tvrace h3').textContent()) === 'The LIVE Race' && await tv.getByRole('button', {name:'Finish race'}).isVisible(), 'a LIVE race can be started');
   await tv.getByRole('button', {name:'Hourly race'}).click();

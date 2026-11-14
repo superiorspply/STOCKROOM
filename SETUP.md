@@ -102,6 +102,34 @@ Both lead to the same review screen. Lines that match an item you already have a
 
 **Cost:** each scan is one request to Claude Opus 5.5 and usually costs a few cents, depending on the invoice's length. Scans that fail don't count toward the monthly limit. Anthropic's spend limit from step 1 is your hard cap.
 
+## Operator (AI assistant)
+
+The **Operator** button at the top of Stockroom opens a chat. Type or tap the microphone and talk to it, for example:
+
+- "Who owes us money?"
+- "What sold best this week?"
+- "Invoice Dom for 200 squishy butters at $2."
+- "Dom paid $1,000 Zelle on INV-0042."
+
+It answers from your Stockroom data. It can create invoices, record payments, add customers and change stock. It can also draft texts for you to send.
+
+Before any change, it shows a card with exactly what it will do, and nothing is saved until you tap **Confirm**. It works through your own login, so it can only see and do what you can; staff don't see costs or profit. It can't send messages itself: **Open in Messages** opens the text for you to send.
+
+### Setting up the Operator (once)
+
+It uses the same Claude API key as invoice scanning (`ANTHROPIC_API_KEY`).
+
+1. **Run the database update.** In the Supabase **SQL Editor**, run [`supabase/migrations/20261114000000_operator.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261114000000_operator.sql).
+2. **Add the Operator function**
+   1. Go to **Edge Functions → Deploy a new function → Via Editor**.
+   2. Name it exactly `operator`.
+   3. Replace the sample code with everything in [`supabase/functions/operator/index.ts`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/functions/operator/index.ts).
+   4. Click **Deploy**.
+   5. In the function's **Details**, turn **Verify JWT** off.
+3. **Turn it on for a company.** As support, go to the person icon → **Support tools**. Tick **Operator (AI assistant)**, set the requests per month (3,000 to start), and click **Save**. Then refresh Stockroom, and the **Operator** button appears.
+
+**Cost:** every reply from the Operator is one request to Claude Opus 5.5. Looking something up and then answering is usually 2 or 3 requests, and each costs about 1–3 cents. Failed requests don't count toward the monthly limit, and Anthropic's spend limit is your hard cap.
+
 ## TikTok Shop finance
 
 **Reports → TikTok Shop** shows what TikTok really pays you:

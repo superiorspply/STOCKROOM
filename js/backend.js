@@ -348,6 +348,26 @@ const runtime = {
       }
     };
   },
+  // Stockroom Operator: one Claude turn per call. The app runs the tools itself (see openOperator in index.html).
+  operator(){
+    return {
+      async status(){
+        const {data, error} = await sb.rpc('operator_status', {cid:S.company.id});
+        if (error) throw new Error(/function|schema cache/i.test(error.message) ? 'The Operator is not set up in the database yet.' : error.message);
+        const r = data && data[0] || {};
+        return {enabled:!!r.enabled, limit:r.monthly_limit || 0, used:r.used || 0};
+      },
+      async turn(messages, context){
+        const {data, error} = await sb.functions.invoke('operator', {body:{company_id:S.company.id, messages, context:Object.assign({role:S.role || ''}, context || {})}});
+        if (error){
+          let msg = '';
+          try { msg = (await error.context.json()).error; } catch(e){}
+          throw new Error(msg || (/Failed to send|fetch/i.test(error.message) ? 'The Operator is not set up yet, or you are offline.' : error.message));
+        }
+        return data;
+      }
+    };
+  },
   assets(){
     return {
       async upload(blob, opts){
@@ -790,6 +810,21 @@ async function openAccount(){
             msg.textContent = e2 ? err(e2) : 'Saved';
           }}, 'Save')), msg);
     });
+    const opBox = h('div', {});
+    sb.rpc('operator_status', {cid:S.company.id}).then(({data, error}) => {
+      if (error || !data || !data[0]){ opBox.replaceChildren(h('p', {class:'hint'}, 'The Operator is not set up in the database yet.')); return; }
+      const r = data[0];
+      const on = h('input', {type:'checkbox'}); on.checked = r.enabled;
+      const lim = h('input', {type:'number', min:'0', max:'100000', step:'1', value:String(r.monthly_limit), style:'width:90px', 'aria-label':'Operator requests per month'});
+      const msg = h('span', {class:'hint', style:'margin:0'});
+      opBox.replaceChildren(
+        h('label', {class:'chk'}, on, h('span', {}, 'Operator (AI assistant) for ' + S.company.name + ' (' + r.used + ' requests this month)')),
+        h('div', {class:'linkbox'}, lim, h('span', {class:'hint', style:'margin:auto 0'}, 'requests per month'),
+          h('button', {class:'btn', type:'button', onclick: async () => {
+            const {error:e2} = await sb.rpc('support_set_operator', {cid:S.company.id, on_off:on.checked, req_limit:Math.max(0, parseInt(lim.value, 10) || 0)});
+            msg.textContent = e2 ? err(e2) : 'Saved';
+          }}, 'Save')), msg);
+    });
     const ttBox = h('div', {});
     sb.rpc('tiktok_status', {cid:S.company.id}).then(({data, error}) => {
       if (error || !data || !data[0] || data[0].enabled === undefined){ ttBox.replaceChildren(h('p', {class:'hint'}, 'The TikTok Shop switch is not set up in the database yet.')); return; }
@@ -802,7 +837,7 @@ async function openAccount(){
             msg.textContent = e2 ? err(e2) : 'Saved';
           }}, 'Save')), msg);
     });
-    parts.push(h('div', {class:'sec'}, 'Support tools'), scanBox, ttBox,
+    parts.push(h('div', {class:'sec'}, 'Support tools'), scanBox, opBox, ttBox,
       h('p', {class:'hint', style:'margin:0 0 8px'}, 'One file with every company\u2019s items, customers, sales, invoices, employees, shifts, settings and team list. Photos stay stored online; the file keeps their links.'),
       go, status);
   }

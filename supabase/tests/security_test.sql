@@ -295,6 +295,33 @@ select t.fails($$select public.tiktok_report((select v::uuid from ids where k='A
 select t.fails($$select public.tiktok_daily_sales((select v::uuid from ids where k='A'), null, null)$$, 'another company cannot load TikTok daily sales for A');
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 
+-- Stockroom Operator (AI assistant).
+select t.ok((select not enabled and used = 0 from public.operator_status((select v::uuid from ids where k='A'))), 'the Operator starts switched off');
+select t.fails($$select public.operator_begin((select v::uuid from ids where k='A'))$$, 'the Operator cannot be used while switched off');
+select t.fails($$select public.support_set_operator((select v::uuid from ids where k='A'), true, 2)$$, 'owners cannot switch the Operator on themselves');
+select t.fails($$insert into public.operator_settings(company_id, enabled) values ((select v::uuid from ids where k='A'), true)$$, 'Operator settings cannot be written directly');
+select t.as_user('00000000-0000-0000-0000-0000000000ff', 'support@stockroom.test');
+select public.support_set_operator((select v::uuid from ids where k='A'), true, 2);
+select t.as_user('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+create temp table opreq(n bigint); grant all on opreq to authenticated;
+insert into opreq select public.operator_begin((select v::uuid from ids where k='A'));
+select t.ok((select count(*) = 1 from opreq), 'a member can use the Operator once support turns it on');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+select public.operator_finish((select max(n) from opreq), true, 10, 5);
+select t.ok((select status = 'started' from public.operator_log where id = (select max(n) from opreq)), 'only the person who made a request can finish it');
+insert into opreq select public.operator_begin((select v::uuid from ids where k='A'));
+select t.ok((select used = 2 from public.operator_status((select v::uuid from ids where k='A'))), 'Operator requests are counted');
+select t.fails($$select public.operator_begin((select v::uuid from ids where k='A'))$$, 'the monthly Operator limit is enforced');
+select public.operator_finish((select max(n) from opreq), false, 0, 0);
+select t.ok((select used = 1 from public.operator_status((select v::uuid from ids where k='A'))), 'a failed request does not count');
+select t.ok(t.count('select * from public.operator_log') = 2, 'owners can read the Operator log');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.fails($$select public.operator_begin((select v::uuid from ids where k='A'))$$, 'another company cannot use A''s Operator');
+select t.fails($$select * from public.operator_status((select v::uuid from ids where k='A'))$$, 'another company cannot see A''s Operator status');
+select t.ok(t.count('select * from public.operator_log') = 0, 'another company cannot read A''s Operator log');
+select t.fails($$select public.operator_begin((select v::uuid from ids where k='B'))$$, 'the Operator stays off for other companies');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+
 -- Signed out.
 reset role; set role anon;
 select t.ok(t.count('select 1 from information_schema.role_table_grants where grantee = ''anon'' and table_schema = ''public''') = 0, 'anon has no table access');

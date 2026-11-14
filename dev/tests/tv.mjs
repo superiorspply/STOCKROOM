@@ -136,6 +136,20 @@ try {
   check(cs.billboards >= 2 && cs.cars >= 1, 'the big towers carry billboards and traffic runs on the roads (' + cs.billboards + ' billboards)');
   check(/^(Night|Daytime|Sunrise|Sunset) in /.test(cs.wx), 'the sky follows the time of day (' + cs.wx + ')');
   if (process.env.SHOT4) { await P.waitForTimeout(6000); await P.screenshot({path:process.env.SHOT4}); }
+  // The team walks the city, a box is loaded at the warehouse for each order, and someone runs to the tower.
+  const crew = await P.evaluate(() => { const C = document.querySelector('#tv .tvcity')._city; return {people:C.people.length, wh:!!C.wh, loaded:C.loaded || 0, runs:C.runs || 0}; });
+  check(crew.people >= 3 && crew.wh && crew.loaded >= 1 && crew.runs >= 1, 'the team walks the city; an order loads a box at the warehouse and sends someone running (' + crew.people + ' people)');
+  // Driving: the car pulls away when the gas is held, seen from behind.
+  await tv.getByRole('button', {name:'Drive', exact:true}).click();
+  await P.waitForFunction(() => document.querySelector('#tv .tvcity').dataset.drive === '1');
+  const z0 = await P.evaluate(() => document.querySelector('#tv .tvcity')._city.D.z);
+  await P.keyboard.down('ArrowUp'); await P.waitForTimeout(3000); await P.keyboard.down('ArrowRight'); await P.waitForTimeout(500); await P.keyboard.up('ArrowRight');
+  if (process.env.SHOT10) await P.screenshot({path:process.env.SHOT10});
+  await P.keyboard.up('ArrowUp');
+  const dr = await P.evaluate(() => { const D = document.querySelector('#tv .tvcity')._city.D; return {z:D.z, x:D.x, bumps:D.bumps||0, v:D.v, mph:document.querySelector('#tv .tvcity .drv b').textContent}; });
+  check(Math.abs(dr.z - z0) > 1 && +dr.mph >= 3, 'Drive puts you behind the wheel: the car moves with the arrow keys (' + dr.mph + ' mph)' + (process.env.DBG ? JSON.stringify(dr) + z0 : ''));
+  await tv.getByRole('button', {name:'Drive', exact:true}).click();
+  check(await tv.locator('.tvcity .drv').isHidden(), 'leaving Drive goes back to the city view');
   // Weather: a record hour rains coins, a runaway product gets the spotlight, fireworks for a big day.
   await P.evaluate(() => localStorage.setItem('ss_tvcitywx', 'coins,spot,fireworks'));
   await P.waitForFunction(() => { const e = document.querySelector('#tv .tvcity'); return e.dataset.coins === '1' && e.dataset.spot && +e.dataset.fireworks >= 10; }, null, {timeout:20000, polling:500});

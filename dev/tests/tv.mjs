@@ -123,6 +123,11 @@ try {
   await tv.getByRole('button', {name:'7 days'}).click();
   await tv.locator('.tvcity .hud p').filter({hasText:'Last 7 days'}).waitFor({timeout:10000});
   check(true, 'the city can show the last 7, 30 or 90 days');
+  const soldNow = async () => +((await tv.locator('.tvcity .hud p').textContent()).match(/([\d,]+) sold on TikTok/)[1].replace(/,/g, ''));
+  const cityBefore = await soldNow();
+  await fetch(API + '/mock-tiktok/add-order', {method:'POST', body:JSON.stringify({name:'Squishy Butter', price:15})});
+  await P.waitForFunction(n => +((document.querySelector('#tv .tvcity .hud p')?.textContent || '').match(/([\d,]+) sold on TikTok/) || [0, '0'])[1].replace(/,/g, '') > n, cityBefore, {timeout:40000, polling:500});
+  check(await soldNow() === cityBefore + 1, 'a new TikTok order adds to the city straight away (' + cityBefore + ' → ' + await soldNow() + ')');
   if (process.env.SHOT4) { await P.waitForTimeout(6000); await P.screenshot({path:process.env.SHOT4}); }
   await tv.getByRole('button', {name:'Dashboard'}).click();
   check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden() && await tv.locator('.tvrace').isHidden() && await tv.locator('.tvcity').isHidden(), 'Dashboard goes back to the live and sales view');

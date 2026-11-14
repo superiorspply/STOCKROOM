@@ -15,6 +15,10 @@ try {
   // The browser's screen-share picker can't be clicked in a test: hand back a moving canvas as "the LIVE tab".
   await ctx.addInitScript(() => {
     try { localStorage.setItem('ss_tvpoll', '2500'); } catch(e){}
+    // The commentator's voice: record what it says instead of speaking.
+    window.__said = [];
+    window.SpeechSynthesisUtterance = function(text){ this.text = text; };
+    Object.defineProperty(window, 'speechSynthesis', {configurable:true, value:{speak(u){ window.__said.push(u.text); setTimeout(() => u.onend && u.onend(), 20); }, cancel(){}, getVoices(){ return []; }, addEventListener(){}}});
     navigator.mediaDevices.getDisplayMedia = async () => {
       const c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d');
       setInterval(() => { x.fillStyle = '#' + ((Math.random() * 0xffffff) | 0).toString(16).padStart(6, '0'); x.fillRect(0, 0, 320, 180); }, 100);
@@ -60,7 +64,7 @@ try {
   check(await tv.getByRole('slider', {name:'Order sound volume'}).count() === 1, 'the order sound can be tested and its volume set');
   if (process.env.SHOT) await P.screenshot({path:process.env.SHOT});
   // The order map: today's orders by state, shipped ones on the way, delivered ones landed.
-  await tv.getByRole('button', {name:'Map view'}).click();
+  await tv.getByRole('button', {name:'Map', exact:true}).click();
   await P.waitForFunction(() => document.querySelector('#tv .tvmap')?.dataset.ready === '1', null, {timeout:20000});
   await tv.locator('.gstats').getByText('On the way').waitFor({timeout:10000});
   await tv.locator('.gstats .g b').filter({hasText:/^37$/}).waitFor({timeout:10000});
@@ -72,8 +76,30 @@ try {
   await tv.locator('.gstats .y b').filter({hasText:/^39$/}).waitFor({timeout:10000});
   check(true, 'a newly shipped order starts flying on the map');
   if (process.env.SHOT2) { await P.waitForTimeout(2500); await P.screenshot({path:process.env.SHOT2}); }
+  // The race: products race, a sale moves one forward, and the commentator calls it.
+  await tv.getByRole('button', {name:'Race', exact:true}).click();
+  await tv.locator('.tvrace .lane').first().waitFor({timeout:5000});
+  const lanes = await tv.locator('.tvrace .lane').allTextContents();
+  check(lanes.length >= 2 && /Texas|California|Florida|New York|Illinois|Ohio|Washington|Georgia/.test(lanes.join(' ')) && await tv.locator('.tvmap').isHidden(), 'Race view lines up the states (' + lanes.join(' | ').slice(0, 120) + ')');
+  check(/The \d{1,2} (AM|PM) Race/.test(await tv.locator('.tvrace h3').textContent()) && /\d+:\d\d/.test(await tv.locator('.rclock').textContent()), 'an hourly race with a countdown');
+  const lefts = () => P.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tv .tvrace .lane')].map(l => [l.querySelector('.tag b').textContent, l.querySelector('.runner').getBoundingClientRect().left])));
+  const total = async () => +(await tv.locator('.tvrace .sub').textContent()).match(/^\d+/)[0];
+  const before = await lefts(), t0 = await total();
+  for (let i = 0; i < 3; i++) await fetch(API + '/mock-tiktok/add-order', {method:'POST', body:JSON.stringify({name:'Cloud Slime', price:15})});
+  await P.waitForFunction(n => +(document.querySelector('#tv .tvrace .sub')?.textContent.match(/^\d+/) || [0])[0] >= n, t0 + 3, {timeout:10000});
+  await P.waitForTimeout(2000);
+  const after = await lefts();
+  check(Object.keys(after).some(k => before[k] != null && after[k] > before[k] + 5) || Object.keys(after).some(k => before[k] == null), 'orders move their states forward (' + JSON.stringify(after).slice(0, 120) + ')');
+  const said = await P.evaluate(() => window.__said);
+  check(said.length >= 1, 'the commentator calls the action (' + said.slice(-3).join(' / ') + ')');
+  await tv.getByRole('button', {name:'LIVE race'}).click();
+  check((await tv.locator('.tvrace h3').textContent()) === 'The LIVE Race' && await tv.getByRole('button', {name:'Finish race'}).isVisible(), 'a LIVE race can be started');
+  await tv.getByRole('button', {name:'Hourly race'}).click();
+  await tv.getByRole('button', {name:'Commentator on'}).click();
+  check(await tv.getByRole('button', {name:'Commentator off'}).count() === 1, 'the commentator can be turned off');
+  if (process.env.SHOT3) { await tv.getByRole('button', {name:'Commentator off'}).click(); await P.waitForTimeout(1800); await P.screenshot({path:process.env.SHOT3}); }
   await tv.getByRole('button', {name:'Dashboard'}).click();
-  check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden(), 'Dashboard goes back to the live and sales view');
+  check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden() && await tv.locator('.tvrace').isHidden(), 'Dashboard goes back to the live and sales view');
   await tv.getByRole('button', {name:'Exit TV'}).click();
   check(await P.locator('#tv').count() === 0, 'Exit TV goes back to Stockroom');
 } catch(e){

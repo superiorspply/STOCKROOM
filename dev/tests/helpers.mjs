@@ -16,10 +16,12 @@ export async function context(b, opts){
     r.fulfill({body:fs.readFileSync(path.join(NM, 'jspdf/dist/jspdf.umd.min.js')), contentType:'text/javascript'}));
   await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/xlsx/**', r =>
     r.fulfill({body:fs.readFileSync(path.join(NM, 'xlsx/dist/xlsx.full.min.js')), contentType:'text/javascript'}));
+  await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/three.js/**', r =>
+    r.fulfill({body:fs.readFileSync(path.join(NM, 'three/build/three.min.js')), contentType:'text/javascript'}));
   await ctx.route('https://cdn.jsdelivr.net/npm/globe.gl@*/dist/globe.gl.min.js', r =>
     r.fulfill({body:fs.readFileSync(path.join(NM, 'globe.gl/dist/globe.gl.min.js')), contentType:'text/javascript'}));
   await ctx.route('https://cdn.jsdelivr.net/npm/three-globe@*/example/img/*', r =>
-    r.fulfill({body:fs.readFileSync(path.join(NM, 'three-globe/example/img/earth-night.jpg')), contentType:'image/jpeg'}));
+    r.fulfill({body:fs.readFileSync(['three-globe', 'globe.gl/node_modules/three-globe'].map(d => path.join(NM, d, 'example/img/earth-night.jpg')).find(f => fs.existsSync(f))), contentType:'image/jpeg'}));
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({body:'', contentType:'text/css'}));
   return ctx;
 }

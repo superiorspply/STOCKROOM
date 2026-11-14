@@ -15,6 +15,7 @@ try {
   // The browser's screen-share picker can't be clicked in a test: hand back a moving canvas as "the LIVE tab".
   await ctx.addInitScript(() => {
     try { localStorage.setItem('ss_tvpoll', '2500'); } catch(e){}
+    try { localStorage.setItem('ss_tvvideolen', '4'); } catch(e){}   // a 4-second film instead of 45
     // The commentator's voice: record what it says instead of speaking.
     window.__said = [];
     window.SpeechSynthesisUtterance = function(text){ this.text = text; };
@@ -76,20 +77,30 @@ try {
   await tv.locator('.gstats .y b').filter({hasText:/^39$/}).waitFor({timeout:10000});
   check(true, 'a newly shipped order starts flying on the map');
   if (process.env.SHOT2) { await P.waitForTimeout(2500); await P.screenshot({path:process.env.SHOT2}); }
+  // Today's video: a short film recorded from the globe, offered to save.
+  const [film] = await Promise.all([P.waitForEvent('download', {timeout:60000}), (async () => {
+    await tv.getByRole('button', {name:/Make today.s video/}).click();
+    await tv.locator('.vstage canvas').first().waitFor({timeout:10000});
+    if (process.env.SHOT5) { await P.waitForTimeout(3500); await P.screenshot({path:process.env.SHOT5}); }
+  })()]);
+  const fs = await import('node:fs');
+  const size = fs.statSync(await film.path()).size;
+  check(/\.(mp4|webm)$/.test(film.suggestedFilename()) && size > 10000, 'Make today\'s video records the globe film and saves it (' + film.suggestedFilename() + ', ' + Math.round(size / 1024) + ' KB)');
+  await tv.locator('.vstage').waitFor({state:'detached', timeout:10000});
   // The race: products race, a sale moves one forward, and the commentator calls it.
   await tv.getByRole('button', {name:'Race', exact:true}).click();
   await tv.locator('.tvrace .lane').first().waitFor({timeout:5000});
   const lanes = await tv.locator('.tvrace .lane').allTextContents();
   check(lanes.length >= 2 && /Texas|California|Florida|New York|Illinois|Ohio|Washington|Georgia/.test(lanes.join(' ')) && await tv.locator('.tvmap').isHidden(), 'Race view lines up the states (' + lanes.join(' | ').slice(0, 120) + ')');
   check(/The \d{1,2} (AM|PM) Race/.test(await tv.locator('.tvrace h3').textContent()) && /\d+:\d\d/.test(await tv.locator('.rclock').textContent()), 'an hourly race with a countdown');
-  const lefts = () => P.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tv .tvrace .lane')].map(l => [l.querySelector('.tag b').textContent, l.querySelector('.runner').getBoundingClientRect().left])));
+  const lefts = () => P.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tv .tvrace .lane')].map(l => [l.querySelector('.tag b').textContent, parseInt(l.querySelector('.tag span').textContent, 10)])));
   const total = async () => +(await tv.locator('.tvrace .sub').textContent()).match(/^\d+/)[0];
   const before = await lefts(), t0 = await total();
   for (let i = 0; i < 3; i++) await fetch(API + '/mock-tiktok/add-order', {method:'POST', body:JSON.stringify({name:'Cloud Slime', price:15})});
   await P.waitForFunction(n => +(document.querySelector('#tv .tvrace .sub')?.textContent.match(/^\d+/) || [0])[0] >= n, t0 + 3, {timeout:10000});
   await P.waitForTimeout(2000);
   const after = await lefts();
-  check(Object.keys(after).some(k => before[k] != null && after[k] > before[k] + 5) || Object.keys(after).some(k => before[k] == null), 'orders move their states forward (' + JSON.stringify(after).slice(0, 120) + ')');
+  check(Object.keys(after).reduce((a, k) => a + Math.max(0, after[k] - (before[k] || 0)), 0) >= 3 && await total() >= t0 + 3, 'orders count for their states in the race (' + JSON.stringify(after).slice(0, 120) + ')');
   const said = await P.evaluate(() => window.__said);
   check(said.length >= 1, 'the commentator calls the action (' + said.slice(-3).join(' / ') + ')');
   await tv.getByRole('button', {name:'Products', exact:true}).click();
@@ -102,8 +113,19 @@ try {
   await tv.getByRole('button', {name:'Commentator on'}).click();
   check(await tv.getByRole('button', {name:'Commentator off'}).count() === 1, 'the commentator can be turned off');
   if (process.env.SHOT3) { await tv.getByRole('button', {name:'Commentator off'}).click(); await P.waitForTimeout(1800); await P.screenshot({path:process.env.SHOT3}); }
+  // Squishy City: the products' buildings, from TikTok's daily tallies.
+  await tv.getByRole('button', {name:'City', exact:true}).click();
+  await P.waitForFunction(() => document.querySelector('#tv .tvcity')?.dataset.ready === '1', null, {timeout:30000, polling:500});
+  await tv.locator('.tvcity .hud p').filter({hasText:/sold on TikTok/}).waitFor({timeout:20000});
+  await P.waitForFunction(() => /[1-9][\d,]* sold on TikTok/.test(document.querySelector('#tv .tvcity .hud p')?.textContent || ''), null, {timeout:30000, polling:500});
+  const hud = await tv.locator('.tvcity .hud').textContent();
+  check(/Squishy City/.test(hud) && /Last 30 days · [\d,]+ sold on TikTok/.test(hud) && await tv.locator('.tvcity canvas').count() === 1 && await tv.locator('.tvrace').isHidden(), 'City view builds Squishy City from TikTok sales (' + hud.slice(0, 90) + ')');
+  await tv.getByRole('button', {name:'7 days'}).click();
+  await tv.locator('.tvcity .hud p').filter({hasText:'Last 7 days'}).waitFor({timeout:10000});
+  check(true, 'the city can show the last 7, 30 or 90 days');
+  if (process.env.SHOT4) { await P.waitForTimeout(6000); await P.screenshot({path:process.env.SHOT4}); }
   await tv.getByRole('button', {name:'Dashboard'}).click();
-  check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden() && await tv.locator('.tvrace').isHidden(), 'Dashboard goes back to the live and sales view');
+  check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden() && await tv.locator('.tvrace').isHidden() && await tv.locator('.tvcity').isHidden(), 'Dashboard goes back to the live and sales view');
   await tv.getByRole('button', {name:'Exit TV'}).click();
   check(await P.locator('#tv').count() === 0, 'Exit TV goes back to Stockroom');
 } catch(e){

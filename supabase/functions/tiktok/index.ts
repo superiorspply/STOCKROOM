@@ -72,7 +72,7 @@ async function tokenCall(kind: "get" | "refresh", value: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return reply(405, { error: "Use POST" });
-  let body: { action?: string; company_id?: string; code?: string; state?: string; since?: number; page_token?: string; by?: string };
+  let body: { action?: string; company_id?: string; code?: string; state?: string; since?: number; page_token?: string; by?: string; days?: number };
   try { body = await req.json(); } catch { return reply(400, { error: "Send JSON" }); }
   if (!env("TIKTOK_APP_KEY") || !env("TIKTOK_APP_SECRET")) return reply(500, { error: "TikTok Shop is not set up yet (missing app key or secret)." });
 
@@ -171,6 +171,23 @@ Deno.serve(async (req) => {
       return reply(200, { orders, next_page_token: token });
     }
 
+    // Squishy City: each product's TikTok units over the last `days` days (TikTok's day, Pacific time). Adds up
+    // days not done yet (and today and yesterday again) for as long as fits in a few seconds; the page calls
+    // again while `missing` is above 0.
+    if (body.action === "city") {
+      const cid = body.company_id;
+      const st = await rpc("tiktok_status", { cid });   // owners and admins only
+      if (st?.[0]?.enabled === false) return reply(403, { error: "TikTok Shop is not turned on for this company." });
+      const { data: link } = await admin.from("tiktok_links").select("*").eq("company_id", cid).maybeSingle();
+      if (!link) return reply(400, { error: "TikTok Shop is not connected." });
+      const days = Math.max(1, Math.min(90, Math.floor(Number(body.days) || 30)));
+      const missing = await fillCity(admin, link, days, 20_000);
+      const want = cityDays(days);
+      const { data, error } = await user.rpc("tiktok_city", { cid, day_from: want[want.length - 1], day_to: want[0] });
+      if (error) throw new Fail(500, error.message);
+      return reply(200, { ...data, days, missing });
+    }
+
     // The hourly job (supabase/setup/tiktok_auto_sync.sql): every connected company that has TikTok Shop on is
     // synced and its new lines added into the totals, so the page is up to date when it opens.
     if (body.action === "auto") {
@@ -190,7 +207,9 @@ Deno.serve(async (req) => {
             if (error) throw new Fail(500, error.message);
             left = Number(data);
           }
-          companies.push({ company_id: link.company_id, ...r, left });
+          let cityLeft = -1;
+          if (Date.now() - started < AUTO_BUDGET_MS - 15_000) cityLeft = await fillCity(admin, link, 30, Math.min(40_000, AUTO_BUDGET_MS - 10_000 - (Date.now() - started))).catch(() => -1);
+          companies.push({ company_id: link.company_id, ...r, left, cityLeft });
         } catch (e) {
           await admin.from("tiktok_links").update({ sync_error: String((e as Error).message) }).eq("company_id", link.company_id);
           companies.push({ company_id: link.company_id, error: String((e as Error).message) });
@@ -321,4 +340,71 @@ async function firstWorking(versions: string[], fn: (v: string) => Promise<void>
     try { await fn(v); return v; } catch (e) { last = e; if (!(e instanceof Fail)) throw e; }
   }
   throw last;
+}
+
+// ---------- Squishy City: TikTok units per product per day ----------
+// TikTok's day is Pacific time (as in Seller Center). ptMidnight("2026-11-14") is that day's start in ms.
+function ptOffset(ms: number) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .formatToParts(ms).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000;
+}
+const ptDay = (ms: number) => new Date(ms + ptOffset(ms)).toISOString().slice(0, 10);
+function ptMidnight(day: string) {
+  const guess = Date.parse(day + "T08:00:00Z");
+  return Date.parse(day + "T00:00:00Z") - ptOffset(guess);
+}
+// The last n Pacific days, newest first ("YYYY-MM-DD").
+function cityDays(n: number) {
+  const out: string[] = []; let d = ptDay(Date.now());
+  for (let i = 0; i < n; i++) { out.push(d); d = new Date(Date.parse(d + "T12:00:00Z") - 864e5).toISOString().slice(0, 10); }
+  return out;
+}
+// Adds up one day's orders by product and replaces that day's totals.
+// deno-lint-ignore no-explicit-any
+async function fillCityDay(admin: any, link: any, day: string) {
+  const from = Math.floor(ptMidnight(day) / 1000), next = new Date(Date.parse(day + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
+  const to = Math.floor(ptMidnight(next) / 1000);
+  const by = new Map<string, { product: string; image: string; units: number; gmv: number }>();
+  let token = "", orders = 0, guard = 0;
+  do {
+    const d = await tiktok("/order/202309/orders/search", link, { page_size: 100, sort_field: "create_time", sort_order: "ASC", page_token: token }, { create_time_ge: from, create_time_lt: to });
+    // deno-lint-ignore no-explicit-any
+    for (const o of (d.orders || []) as any[]) {
+      if (o.status === "UNPAID" || o.status === "CANCELLED") continue;
+      orders++;
+      // deno-lint-ignore no-explicit-any
+      for (const l of (o.line_items || []) as any[]) {
+        const k = String(l.product_name || "Item").slice(0, 200);
+        const e = by.get(k) || { product: k, image: String(l.sku_image || ""), units: 0, gmv: 0 };
+        e.units++; e.gmv += Number(l.sale_price) || 0; if (!e.image && l.sku_image) e.image = String(l.sku_image);
+        by.set(k, e);
+      }
+    }
+    token = String(d.next_page_token || "");
+  } while (token && ++guard < 400);
+  await admin.from("tiktok_product_days").delete().eq("company_id", link.company_id).eq("day", day);
+  const rows = [...by.values()].map((e) => ({ company_id: link.company_id, day, product: e.product, image: e.image || null, units: e.units, gmv: Math.round(e.gmv * 100) / 100 }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await admin.from("tiktok_product_days").insert(rows.slice(i, i + 500));
+    if (error) throw new Fail(500, error.message);
+  }
+  await admin.from("tiktok_city_days").upsert({ company_id: link.company_id, day, orders, filled_at: new Date().toISOString() });
+}
+// Fills the last n days that are missing, plus today and yesterday when last added up over 20 minutes ago,
+// newest first, while time allows. Returns how many days are still missing.
+// deno-lint-ignore no-explicit-any
+async function fillCity(admin: any, link: any, n: number, budgetMs: number) {
+  const started = Date.now();
+  await freshToken(admin, link);
+  const want = cityDays(n);
+  const { data: have } = await admin.from("tiktok_city_days").select("day, filled_at").eq("company_id", link.company_id).gte("day", want[want.length - 1]);
+  const at = new Map((have || []).map((r: { day: string; filled_at: string }) => [String(r.day).slice(0, 10), Date.parse(r.filled_at)]));
+  const todo = want.filter((d, i) => !at.has(d) || (i < 2 && Date.now() - (at.get(d) as number) > 20 * 60_000));
+  let done = 0;
+  for (const d of todo) {
+    if (Date.now() - started > budgetMs) break;
+    await fillCityDay(admin, link, d); done++;
+  }
+  return want.filter((d) => !at.has(d)).length - todo.slice(0, done).filter((d) => !at.has(d)).length;
 }

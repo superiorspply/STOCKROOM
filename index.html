@@ -419,7 +419,11 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv.idle .tvctl{opacity:0}
 #tv.idle{cursor:none}
 #tv .tvctl button{background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.8vh .9vw;font:inherit;font-size:1.5vh;cursor:pointer;white-space:nowrap}
-#tv .tvctl{flex-wrap:nowrap;min-width:0;gap:.5vw}
+#tv{grid-template-columns:minmax(0,1fr)}
+#tv .tvtop{position:relative}
+#tv .tvctl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;flex-wrap:nowrap;justify-content:center;max-width:64vw;gap:.4vw}
+#tv .tvctl button,#tv .tvctl select{font-size:1.35vh!important;padding:.7vh .7vw!important}
+
 #tv .tvctl>*{flex-shrink:0}
 #tv .clock{white-space:nowrap}
 #tv .tvtop h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:16vw}
@@ -504,6 +508,26 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .views button{border:0;border-radius:0;background:#1c1c21}
 #tv .views button[aria-pressed=true]{background:#e5192b;color:#fff}
 #tv .say{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);background:rgba(5,5,6,.85);border:1px solid #27272e;color:#fff;font-size:2.4vh;padding:1vh 2vw;border-radius:99px;z-index:6;max-width:80%;text-align:center;animation:tvpop2 .3s ease-out}
+#tv .tvcity{grid-column:1/-1;position:relative;border-radius:2vh;overflow:hidden;background:#04050a;border:1px solid #1c1c21;min-height:0}
+#tv .tvcity canvas{position:absolute;inset:0;display:block;width:100%!important;height:100%!important;cursor:grab}
+#tv .tvcity .hud{position:absolute;left:2vw;top:2vh;pointer-events:none;text-shadow:0 .3vh 1.6vh rgba(0,0,0,.8)}
+#tv .tvcity .hud h3{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:6vh;letter-spacing:-.02em;line-height:1}
+#tv .tvcity .hud p{margin:.8vh 0 0;font-size:2.2vh;color:#c3c3cc}
+#tv .tvcity .hud .dist{display:flex;gap:2vw;margin-top:1.4vh;font-size:1.9vh;color:#c3c3cc}
+#tv .tvcity .hud .dist i{display:inline-block;width:1.2vh;height:1.2vh;border-radius:.3vh;margin-right:.5vw;vertical-align:middle}
+#tv .tvcity .cctl{position:absolute;right:2vw;top:2vh;display:flex;gap:.6vw;transition:opacity .4s}
+#tv.idle .tvcity .cctl{opacity:0}
+#tv .tvcity .cctl button{background:rgba(28,28,33,.85);color:#c3c3cc;border:1px solid #27272e;border-radius:99px;padding:.6vh 1.2vw;font:inherit;font-size:1.6vh;cursor:pointer}
+#tv .tvcity .cctl button[aria-pressed=true]{background:#e5192b;color:#fff;border-color:#e5192b}
+#tv .tvcity .cmsg{position:absolute;left:50%;bottom:3vh;transform:translateX(-50%);background:rgba(5,5,6,.8);border:1px solid #27272e;border-radius:99px;padding:1vh 2vw;font-size:2vh;color:#e8e8ee;white-space:nowrap}
+#tv .vidbtn{position:absolute;right:1.4vw;top:1.6vh;z-index:3;background:#e5192b;color:#fff;border:0;border-radius:99px;padding:1vh 1.6vw;font:inherit;font-size:1.8vh;font-weight:700;cursor:pointer;box-shadow:0 1vh 3vh rgba(229,25,43,.35)}
+#tv.idle .vidbtn{opacity:0;transition:opacity .4s}
+#tv .vstage{position:fixed;inset:0;z-index:90;background:#000;display:grid;place-items:center}
+#tv .vstage canvas{max-width:100vw;max-height:100vh;width:auto;height:100vh;aspect-ratio:16/9}
+#tv .vstage .vg{position:absolute;left:0;top:0;width:1280px;height:720px;opacity:0;pointer-events:none}
+#tv .vstage .rec{position:absolute;left:2vw;top:2vh;display:flex;align-items:center;gap:.8vw;font-size:1.8vh;color:#fff;background:rgba(0,0,0,.55);border-radius:99px;padding:.6vh 1.2vw}
+#tv .vstage .rec i{width:1.2vh;height:1.2vh;border-radius:50%;background:#e5192b;animation:tvpulse 1.2s infinite}
+#tv .vstage .stop{position:absolute;right:2vw;top:2vh;background:rgba(28,28,33,.9);color:#fff;border:1px solid #27272e;border-radius:99px;padding:.8vh 1.4vw;font:inherit;font-size:1.6vh;cursor:pointer}
 @media (prefers-reduced-motion:reduce){#tv .runner .av{animation:none}#tv .runner{transition:none}}
 @media (prefers-reduced-motion:reduce){#tv .onair.on,#tv .feed .o.new,#tv .tick div,#tv .pop{animation:none}}
 </style>
@@ -5037,7 +5061,8 @@ function tvMap(tt, T){
   const box = h('div',{class:'globe'}, h('div',{class:'gmsg'}, 'Loading the map…'));
   const legend = h('div',{class:'legend'}, h('span',{}, h('i',{style:'background:#ff5a64'}), 'New order'), h('span',{}, h('i',{style:'background:#ffb84d'}), 'On the way'), h('span',{}, h('i',{style:'background:#3ddc97'}), 'Delivered'));
   const stats = h('div',{class:'gstats'}), topStates = h('div',{class:'tops'});
-  const el = h('div',{class:'tvmap'}, box, h('div',{class:'gside'}, h('div',{class:'card'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Today across the country'), stats), h('div',{class:'card'}, h('div',{class:'lbl'},'Top states today'), topStates), h('div',{class:'fslot',style:'display:flex;min-height:0'})));
+  const vidBtn = h('button',{class:'vidbtn',type:'button',onclick:()=>makeVideo()},'🎬 Make today\u2019s video');
+  const el = h('div',{class:'tvmap'}, h('div',{style:'position:relative;min-height:0;display:grid'}, box, vidBtn), h('div',{class:'gside'}, h('div',{class:'card'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Today across the country'), stats), h('div',{class:'card'}, h('div',{class:'lbl'},'Top states today'), topStates), h('div',{class:'fslot',style:'display:flex;min-height:0'})));
   const home = tvHome();
   const moving = s => s==='AWAITING_COLLECTION' || s==='IN_TRANSIT';
   const todayO = ()=>[...M.orders.values()];
@@ -5091,6 +5116,119 @@ function tvMap(tt, T){
     } while (token && ++guard < 100);
     M.loaded = true; paint();
   }
+  // Today's cinematic: a second globe (kept to 1280x720 so it records smoothly) plays a 45-second film of
+  // the day: space, the swoop into the US, the day's orders replayed hour by hour with packages flying out of
+  // the warehouse, the top states, and the end card, with music made on the spot. It is recorded straight to
+  // a video file (MP4 where the browser can, otherwise WebM) and offered to save.
+  async function makeVideo(){
+    if (!window.Globe || !window.MediaRecorder){ toast('Recording a video is not available in this browser.'); return; }
+    const LEN = (()=>{ try { return Math.max(3, +localStorage.getItem('ss_tvvideolen') || 45); } catch(e){ return 45; } })();
+    const W = 1280, H = 720;
+    const out = document.createElement('canvas'); out.width = W; out.height = H; const cx = out.getContext('2d');
+    const gbox = h('div',{class:'vg'}), rec = h('div',{class:'rec'}, h('i',{}), h('span',{}, 'Recording today\u2019s video…'));
+    const stopBtn = h('button',{class:'stop',type:'button'},'Stop');
+    const stage = h('div',{class:'vstage'}, gbox, out, rec, stopBtn);
+    el.closest('#tv').append(stage);
+    const all = todayO().filter(o=>o.t*1000 >= M.day && o.status!=='CANCELLED' && o.status!=='UNPAID').map(o=>({o, g:tvGeo(o)})).filter(x=>x.g).sort((a,b)=>a.o.t-b.o.t);
+    const shippedSet = new Set(todayO().filter(o=>moving(o.status) || o.status==='DELIVERED').map(o=>o.id));
+    const byState = new Map(); all.forEach(x=>byState.set(x.g.st, (byState.get(x.g.st)||0)+1));
+    const topSt = [...byState.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const total = all.length, gmv = round2(all.reduce((a,x)=>a+(x.o.gmv||0),0));
+    const g = window.Globe({rendererConfig:{preserveDrawingBuffer:true, antialias:true}})(gbox)
+      .width(W).height(H).backgroundColor('#000000')
+      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-night.jpg')
+      .atmosphereColor('#ff5a64').atmosphereAltitude(0.18)
+      .pointLat('lat').pointLng('lng').pointColor('c').pointRadius(0.22).pointAltitude(0.012)
+      .arcStartLat(d=>d.s[0]).arcStartLng(d=>d.s[1]).arcEndLat(d=>d.e[0]).arcEndLng(d=>d.e[1])
+      .arcColor(()=>['rgba(255,90,100,0.95)','rgba(255,184,77,0.95)']).arcStroke(0.45).arcAltitudeAutoScale(0.4)
+      .arcDashLength(0.4).arcDashGap(2).arcDashInitialGap(()=>Math.random()).arcDashAnimateTime(1800)
+      .labelsData([{lat:home.lat, lng:home.lng, text:home.name}]).labelLat('lat').labelLng('lng').labelText('text').labelSize(1.2).labelDotRadius(0.5).labelColor(()=>'#ffffff').labelResolution(2)
+      .pointOfView({lat:20, lng:-60, altitude:4.2});
+    try { g.controls().enabled = false; } catch(e){}
+    const gl = gbox.querySelector('canvas');
+    // Music: a slow four-chord pad over a soft pulse, building, then resolving. Made with Web Audio.
+    const ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination();
+    const master = ac.createGain(); master.gain.value = 0.5; master.connect(dest); master.connect(ac.destination);
+    const t0 = ac.currentTime + 0.1, beat = 60/96, chords = [[220,261.6,329.6],[174.6,220,261.6],[261.6,329.6,392],[196,246.9,293.7]];
+    for (let bar=0; bar*4*beat < LEN; bar++){
+      const tb = t0 + bar*4*beat, ch = chords[bar % 4], build = Math.min(1, (bar*4*beat)/(LEN*0.7));
+      ch.forEach(f=>[f, f*2.003].forEach(ff=>{ const o = ac.createOscillator(), gn = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = ff;
+        lp.type = 'lowpass'; lp.frequency.value = 500 + 2200*build; gn.gain.setValueAtTime(0.0001, tb); gn.gain.exponentialRampToValueAtTime(0.05, tb + 0.6); gn.gain.exponentialRampToValueAtTime(0.0001, tb + 4*beat + 0.3);
+        o.connect(lp).connect(gn).connect(master); o.start(tb); o.stop(tb + 4*beat + 0.4); }));
+      for (let k=0;k<4;k++){ const tk = tb + k*beat; if (tk - t0 > LEN - 2) break; const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.setValueAtTime(110, tk); o.frequency.exponentialRampToValueAtTime(42, tk + 0.18);
+        gn.gain.setValueAtTime(0.0001, tk); gn.gain.exponentialRampToValueAtTime(0.35*(0.4 + build*0.6), tk + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, tk + 0.3); o.connect(gn).connect(master); o.start(tk); o.stop(tk + 0.32); }
+    }
+    const stream = out.captureStream(30); dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+    // H.264 MP4 plays everywhere (QuickTime, iPhone, TikTok, Instagram); Chrome on a Mac records it. Otherwise WebM.
+    const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m)) || '';
+    const mr = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:8_000_000} : undefined), chunks = [];
+    mr.ondataavailable = e=>{ if (e.data && e.data.size) chunks.push(e.data); };
+    const day = new Date().toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
+    const ease = x=>x<0 ? 0 : x>1 ? 1 : x*x*(3-2*x);
+    const txt = (t, x, y, size, color, alpha, align, weight)=>{ cx.globalAlpha = Math.max(0, Math.min(1, alpha)); cx.fillStyle = color; cx.font = (weight||700)+' '+size+"px 'Bricolage Grotesque', system-ui, sans-serif"; cx.textAlign = align || 'left'; cx.fillText(t, x, y); cx.globalAlpha = 1; };
+    let raf = 0, stopped = false, shown = 0;
+    const T0 = performance.now();
+    // Camera moves: from space to the US, then drifting across it.
+    setTimeout(()=>g.pointOfView({lat:38, lng:-95, altitude:1.5}, LEN*1000*0.2), LEN*1000*0.08);
+    setTimeout(()=>g.pointOfView({lat:37, lng:-82, altitude:1.25}, LEN*1000*0.3), LEN*1000*0.34);
+    setTimeout(()=>g.pointOfView({lat:39, lng:-104, altitude:1.45}, LEN*1000*0.25), LEN*1000*0.66);
+    function frame(){
+      const sec = (performance.now() - T0)/1000, f = sec/LEN;
+      // Orders appear through the day as the film plays (from 30% to 75% of it).
+      const upto = Math.floor(total * ease((f - 0.3)/0.45));
+      if (upto !== shown){ shown = upto; const vis = all.slice(0, upto);
+        g.pointsData(vis.map(x=>({lat:x.g.lat, lng:x.g.lng, c:shippedSet.has(x.o.id) ? '#ffb84d' : '#ff5a64'})));
+        g.arcsData(vis.filter(x=>shippedSet.has(x.o.id)).slice(-260).map(x=>({s:[home.lat, home.lng], e:[x.g.lat, x.g.lng]}))); }
+      cx.clearRect(0,0,W,H); if (gl) cx.drawImage(gl, 0, 0, W, H);
+      const vg = cx.createLinearGradient(0,0,0,H); vg.addColorStop(0,'rgba(0,0,0,.55)'); vg.addColorStop(.35,'rgba(0,0,0,0)'); vg.addColorStop(.75,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.6)'); cx.fillStyle = vg; cx.fillRect(0,0,W,H);
+      // Title card.
+      const ti = ease(f/0.04) * (1 - ease((f-0.22)/0.05));
+      txt(BRAND(), W/2, H*0.44, 84, '#ffffff', ti, 'center', 800);
+      txt(day, W/2, H*0.44 + 58, 32, '#ffb4b9', ti, 'center', 600);
+      txt('Today on TikTok Shop', W/2, H*0.44 + 104, 26, '#c3c3cc', ti, 'center', 500);
+      // The replay: the clock of the day and the orders counting up.
+      const ri = ease((f-0.27)/0.04) * (1 - ease((f-0.8)/0.04));
+      if (ri > 0){
+        const at = all[Math.max(0, shown-1)], clock = at ? new Date(at.o.t*1000).toLocaleTimeString([], {hour:'numeric', minute:'2-digit', timeZone:'America/Los_Angeles'})+' PT' : '';
+        txt(fmtN(shown), 64, H - 92, 96, '#ffffff', ri, 'left', 800);
+        txt('orders today', 68, H - 52, 28, '#c3c3cc', ri, 'left', 500);
+        txt(clock, W - 64, H - 60, 44, '#ffb84d', ri, 'right', 700);
+        txt('Shipping from '+home.name, W - 64, 76, 26, '#ffffff', ri*0.85, 'right', 600);
+      }
+      // Top states.
+      const si = ease((f-0.62)/0.04) * (1 - ease((f-0.82)/0.04));
+      if (si > 0 && topSt.length){ txt('Top states today', 64, 88, 28, '#c3c3cc', si, 'left', 600);
+        topSt.forEach(([k,n],i)=>txt((i+1)+'. '+k+'  '+fmtN(n), 64, 140 + i*48, 36, '#ffffff', si * ease((f-0.63-i*0.012)/0.03), 'left', 700)); }
+      // End card.
+      const ei = ease((f-0.84)/0.05);
+      if (ei > 0){ cx.globalAlpha = ei*0.7; cx.fillStyle = '#000'; cx.fillRect(0,0,W,H); cx.globalAlpha = 1;
+        txt(fmtN(total)+' orders', W/2, H*0.42, 92, '#ffffff', ei, 'center', 800);
+        txt(byState.size+' states · '+shortMoney(gmv)+' in sales', W/2, H*0.42 + 66, 38, '#ffb84d', ei, 'center', 700);
+        txt(BRAND()+' · '+day, W/2, H*0.42 + 124, 26, '#c3c3cc', ei, 'center', 500); }
+      if (sec >= LEN || stopped){ finish(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    function finish(){
+      cancelAnimationFrame(raf);
+      if (mr.state !== 'inactive') mr.stop();
+    }
+    mr.onstop = async ()=>{
+      try { ac.close(); } catch(e){}
+      try { g._destructor && g._destructor(); } catch(e){}
+      stage.remove();
+      if (stopped && !chunks.length) return;
+      const type = (mr.mimeType || mime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, {type});
+      const name = (BRAND()+'-'+localDay(nowIso())).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.'+ext;
+      try { if (state.dl) await state.dl.save({filename:name, data:blob}); else throw new Error('no downloads'); }
+      catch(e){ if (!(e && e.code==='declined')){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); } }
+      toast('Saved '+name);
+    };
+    stopBtn.onclick = ()=>{ stopped = true; };
+    // Give the globe a moment to draw its texture, then roll.
+    setTimeout(()=>{ mr.start(1000); raf = requestAnimationFrame(frame); }, 1200);
+  }
+
   async function start(){
     try {
       await loadScript('js/geo-us.js');
@@ -5121,7 +5259,7 @@ function tvMap(tt, T){
     M.timer = setInterval(()=>{ if (!document.hidden) pull().catch(()=>{}); }, T.pollMs);
     M.repaint = setInterval(()=>{ if (M.rings.length) paint(); }, 1500);
   }
-  return {el, start, stop(){ clearInterval(M.timer); clearInterval(M.drift); clearInterval(M.repaint); if (M.resize) window.removeEventListener('resize', M.resize); if (M.ro) M.ro.disconnect(); try { M.globe && M.globe._destructor && M.globe._destructor(); } catch(e){} }, resize:()=>M.resize && M.resize()};
+  return {el, start, pause(on){ try { if (M.globe) on ? M.globe.pauseAnimation() : M.globe.resumeAnimation(); } catch(e){} }, stop(){ clearInterval(M.timer); clearInterval(M.drift); clearInterval(M.repaint); if (M.resize) window.removeEventListener('resize', M.resize); if (M.ro) M.ro.disconnect(); try { M.globe && M.globe._destructor && M.globe._destructor(); } catch(e){} }, resize:()=>M.resize && M.resize()};
 }
 // TV Race: US states race across the screen; every TikTok order from a state moves it forward. A race runs for
 // the clock hour, a 15-minute sprint, or a LIVE race started and finished by hand. The leader sits near the
@@ -5233,6 +5371,182 @@ function tvRace(T, talk){
   return {el, onOrders, paint, stop(){ clearInterval(timer); }};
 }
 
+// Squishy City: a night-time 3D city (three.js, loaded only when opened) where every product is a skyscraper
+// whose height is how many sold over the chosen days. Two districts: TikTok (units from tiktok_product_days,
+// filled by the tiktok function's "city" action) and Wholesale (Stockroom's own sales). Trucks drive out of a
+// building when it sells. Drag to look around; it flies on its own when left alone.
+function tvCity(T, tt){
+  const C = {days:30, tk:[], ws:[], three:null, raf:0, built:false, drag:null, idleAt:0, ang:0.6, trucks:[], bld:new Map(), msg:null};
+  try { const d = +localStorage.getItem('ss_tvcitydays'); if ([7,30,90].includes(d)) C.days = d; } catch(e){}
+  const title = h('h3',{}), sub = h('p',{}), dist = h('div',{class:'dist'}, h('span',{}, h('i',{style:'background:#ff3b4a'}), 'TikTok district'), h('span',{}, h('i',{style:'background:#36c5f0'}), 'Wholesale district'));
+  const msg = h('div',{class:'cmsg',hidden:true});
+  const dayBtns = [7,30,90].map(d=>h('button',{type:'button','aria-pressed':String(C.days===d),onclick:()=>{ C.days = d; try { localStorage.setItem('ss_tvcitydays', String(d)); } catch(e){} dayBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String([7,30,90][i]===d))); load(); }}, d+' days'));
+  const el = h('div',{class:'tvcity'}, h('div',{class:'hud'}, title, sub, dist), h('div',{class:'cctl'}, ...dayBtns), msg);
+  el._city = C;   // for tests
+  const say = t=>{ msg.textContent = t; msg.hidden = !t; };
+  const wholesale = ()=>{
+    const from = Date.now() - C.days*DAY, m = new Map();
+    for (const x of state.sales){ if (Date.parse(x.at) < from) continue; const k = x.name || 'Item'; const e = m.get(k) || {product:k, units:0, gmv:0}; e.units += x.qty||0; e.gmv += x.total||0; m.set(k, e); }
+    return [...m.values()].sort((a,b)=>b.units-a.units).slice(0, 36);
+  };
+  async function load(){
+    C.ws = wholesale();
+    if (tt){
+      try {
+        let r, guard = 0;
+        do { r = await tt.city(C.days); C.tk = (r.products||[]).slice(0, 48); build();
+          if (r.missing > 0) say('Building the city… '+(C.days - r.missing)+' of '+C.days+' days of TikTok sales added up');
+        } while (r.missing > 0 && ++guard < 60 && el.isConnected);
+        say(''); C.orders = r.orders || 0;
+      } catch(e){ say(e.message); }
+    }
+    build();
+  }
+  // Night windows: a canvas texture of lit and dark windows.
+  function windowTex(THREE, tint){
+    const c = document.createElement('canvas'); c.width = 64; c.height = 128; const x = c.getContext('2d');
+    x.fillStyle = '#07080d'; x.fillRect(0,0,64,128);
+    for (let r=0;r<16;r++) for (let k=0;k<4;k++){ const on = Math.random() < 0.55; x.fillStyle = on ? (Math.random()<0.25 ? tint : '#ffd68a') : '#10131c'; x.globalAlpha = on ? 0.6 + Math.random()*0.4 : 1; x.fillRect(4+k*15, 4+r*7.8, 10, 4.5); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  }
+  function label(THREE, text, sub, color){
+    const c = document.createElement('canvas'); c.width = 512; c.height = 160; const x = c.getContext('2d');
+    x.fillStyle = 'rgba(5,5,10,.72)'; x.beginPath(); x.roundRect ? x.roundRect(6,6,500,148,30) : x.rect(6,6,500,148); x.fill();
+    x.fillStyle = color; x.fillRect(6, 6, 12, 148);
+    x.fillStyle = '#ffffff'; x.font = '700 52px system-ui, sans-serif'; x.fillText(text.length > 18 ? text.slice(0,17)+'…' : text, 34, 74);
+    x.fillStyle = '#c3c3cc'; x.font = '500 40px system-ui, sans-serif'; x.fillText(sub, 34, 128);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), depthTest:false, transparent:true}));
+    sp.scale.set(40, 12.5, 1); sp.renderOrder = 10; return sp;
+  }
+  function build(){
+    const K = C.three; if (!K) return;
+    const sig = C.days+'|'+C.tk.map(p=>p.product+p.units).join(',')+'|'+C.ws.map(p=>p.product+p.units).join(',');
+    if (sig===C.sig) return; C.sig = sig;
+    const {THREE, scene, city} = K;
+    while (city.children.length) city.remove(city.children[0]);
+    C.bld.clear();
+    const all = C.tk.length ? C.tk : [];
+    const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0);
+    const named = [...C.tk, ...C.ws].some(p=>/squish/i.test(p.product));
+    title.textContent = named ? 'Squishy City' : BRAND()+' City';
+    sub.textContent = 'Last '+C.days+' days · '+fmtN(totalTk)+' sold on TikTok · '+fmtN(totalWs)+' sold wholesale';
+    // Lay out a district: tallest buildings in the middle, spiralling out on a grid.
+    const district = (list, cx, color, glow, kind)=>{
+      if (!list.length) return;
+      const max = Math.max(...list.map(p=>p.units)), pos = [];
+      for (let r=0; pos.length < list.length; r++) for (let i=-r;i<=r;i++) for (let j=-r;j<=r;j++) if (Math.max(Math.abs(i),Math.abs(j))===r && pos.length < list.length) pos.push([i,j]);
+      const tex = windowTex(THREE, color);
+      list.forEach((p,n)=>{
+        const hgt = 4 + 86*Math.sqrt(p.units/Math.max(1,max)), w = n < 3 ? 9 : 7;
+        const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(1, Math.max(1, Math.round(hgt/12)));
+        const mat = new THREE.MeshStandardMaterial({color:0x151925, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.9, roughness:0.6, metalness:0.2});
+        const g = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, w), mat);
+        const [i,j] = pos[n]; g.position.set(cx + i*13, hgt/2, j*13); g.scale.y = 0.01; g.userData = {h:hgt, grow:0.002 + Math.random()*0.004, base:hgt/2};
+        city.add(g);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(w*1.02, 0.6, w*1.02), new THREE.MeshBasicMaterial({color:glow}));
+        cap.position.set(g.position.x, hgt + 0.3, g.position.z); cap.userData = {h:hgt}; cap.visible = false; city.add(cap);
+        let lb = null;
+        if (n < 8){ lb = label(THREE, p.product, fmtN(p.units)+' sold', '#'+glow.toString(16).padStart(6,'0')); lb.renderOrder = 100 - n; lb.position.set(g.position.x, hgt + 10, g.position.z); lb.visible = false; city.add(lb); }
+        C.bld.set(kind+'|'+p.product, {g, cap, lb, p});
+      });
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(Math.ceil(Math.sqrt(list.length)+1)*13 + 10, Math.ceil(Math.sqrt(list.length)+1)*13 + 10), new THREE.MeshBasicMaterial({color:glow, transparent:true, opacity:0.06}));
+      pad.rotation.x = -Math.PI/2; pad.position.set(cx, 0.05, 0); city.add(pad);
+    };
+    const off = Math.max(60, Math.ceil(Math.sqrt(Math.max(all.length, C.ws.length)))*7 + 20);
+    district(C.tk, C.ws.length ? -off : 0, '#ff6b74', 0xff3b4a, 'tk');
+    district(C.ws, C.tk.length ? off : 0, '#7fd8ff', 0x36c5f0, 'ws');
+    // The rest of the city: a skyline of darker buildings around the districts, on a grid of glowing roads.
+    if (!K.skyline){
+      K.skyline = new THREE.Group(); K.scene.add(K.skyline);
+      const tex = windowTex(THREE, '#9aa6c8'), occupied = (x, z)=>Math.abs(z) < off*0.9 && Math.abs(Math.abs(x) - (C.ws.length && C.tk.length ? off : 0)) < off*0.9;
+      for (let i=-14;i<=14;i++) for (let j=-14;j<=14;j++){
+        const x = i*13, z = j*13; if (occupied(x, z) || Math.random() < 0.35) continue;
+        const d = Math.hypot(x, z), hh = 3 + Math.random()*Math.max(4, 34 - d/9);
+        const t2 = tex.clone(); t2.needsUpdate = true; t2.repeat.set(1, Math.max(1, Math.round(hh/12)));
+        const m = new THREE.Mesh(new THREE.BoxGeometry(6 + Math.random()*3, hh, 6 + Math.random()*3), new THREE.MeshStandardMaterial({color:0x0c0f18, map:t2, emissive:0xffffff, emissiveMap:t2, emissiveIntensity:0.32, roughness:0.8}));
+        m.position.set(x + (Math.random()-0.5)*3, hh/2, z + (Math.random()-0.5)*3); K.skyline.add(m);
+      }
+      const roadMat = new THREE.MeshBasicMaterial({color:0x2a3550, transparent:true, opacity:0.55});
+      for (let i=-14;i<=14;i++){
+        const a = new THREE.Mesh(new THREE.PlaneGeometry(380, 0.9), roadMat); a.rotation.x = -Math.PI/2; a.position.set(0, 0.06, i*13 + 6.5); K.skyline.add(a);
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 380), roadMat); b.rotation.x = -Math.PI/2; b.position.set(i*13 + 6.5, 0.06, 0); K.skyline.add(b);
+      }
+    }
+    const tallest = Math.max(30, ...[...C.bld.values()].map(b=>b.g.userData.h));
+    C.radius = Math.max(150, off*1.5 + tallest*1.1);
+    C.look = Math.min(40, tallest*0.38);
+  }
+  function truck(fromKey){
+    const K = C.three; if (!K) return;
+    const b = C.bld.get(fromKey); const {THREE, city} = K;
+    const start = b ? b.g.position.clone() : new THREE.Vector3(0,0,0); start.y = 0.8;
+    const a = Math.random()*Math.PI*2, end = new THREE.Vector3(start.x + Math.cos(a)*400, 0.8, start.z + Math.sin(a)*400);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, 1.2), new THREE.MeshBasicMaterial({color:0xffd68a}));
+    m.position.copy(start); m.lookAt(end); city.add(m);
+    C.trucks.push({m, start, end, t:0});
+    if (b){ b.pulse = 1; }
+  }
+  async function start(){
+    try {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+      const THREE = window.THREE;
+      const renderer = new THREE.WebGLRenderer({antialias:true, preserveDrawingBuffer:false});
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1)); renderer.setSize(el.clientWidth||800, el.clientHeight||600);
+      el.prepend(renderer.domElement);
+      const scene = new THREE.Scene(); scene.background = new THREE.Color(0x04050a); scene.fog = new THREE.FogExp2(0x04050a, 0.0019);
+      const camera = new THREE.PerspectiveCamera(50, (el.clientWidth||800)/(el.clientHeight||600), 1, 3000);
+      scene.add(new THREE.HemisphereLight(0x4060a0, 0x080810, 0.6));
+      const moon = new THREE.DirectionalLight(0xaabbff, 0.5); moon.position.set(-200, 300, 100); scene.add(moon);
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshStandardMaterial({color:0x07080d, roughness:1}));
+      ground.rotation.x = -Math.PI/2; scene.add(ground);
+      const grid = new THREE.GridHelper(2000, 154, 0x1a2030, 0x10141e); grid.position.y = 0.02; scene.add(grid);
+      const sg = new THREE.BufferGeometry(), sp = [];
+      for (let i=0;i<1500;i++){ const t = Math.random()*Math.PI*2, f = Math.random()*Math.PI*0.45; sp.push(Math.cos(t)*Math.cos(f)*1400, 80 + Math.sin(f)*1400, Math.sin(t)*Math.cos(f)*1400); }
+      sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+      scene.add(new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff, size:1.6, sizeAttenuation:false})));
+      const city = new THREE.Group(); scene.add(city);
+      C.three = {THREE, renderer, scene, camera, city};
+      // Look around: drag to turn, wheel to zoom; after a few seconds alone it flies on its own again.
+      const cv = renderer.domElement;
+      cv.addEventListener('pointerdown', e=>{ C.drag = {x:e.clientX, y:e.clientY, a:C.ang, h:C.hgt||0.45}; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+      cv.addEventListener('pointermove', e=>{ if (!C.drag) return; C.ang = C.drag.a - (e.clientX - C.drag.x)*0.005; C.hgt = Math.max(0.12, Math.min(1.2, C.drag.h + (e.clientY - C.drag.y)*0.003)); C.idleAt = Date.now(); });
+      cv.addEventListener('pointerup', ()=>{ C.drag = null; cv.style.cursor = 'grab'; C.idleAt = Date.now(); });
+      cv.addEventListener('wheel', e=>{ e.preventDefault(); C.zoom = Math.max(0.4, Math.min(2.2, (C.zoom||1) * (e.deltaY > 0 ? 1.08 : 0.92))); C.idleAt = Date.now(); }, {passive:false});
+      C.resize = ()=>{ const w = el.clientWidth, hh = el.clientHeight; if (!w || !hh) return; renderer.setSize(w, hh); camera.aspect = w/hh; camera.updateProjectionMatrix(); };
+      if (window.ResizeObserver){ C.ro = new ResizeObserver(C.resize); C.ro.observe(el); }
+      build();
+      let last = performance.now();
+      const frame = now=>{
+        const dt = Math.min(0.05, (now - last)/1000); last = now;
+        if (!C.drag && Date.now() - C.idleAt > 6000) C.ang += dt*0.06;
+        const R = (C.radius||220) * (C.zoom||1), hgt = C.hgt || 0.45;
+        camera.position.set(Math.cos(C.ang)*R, R*hgt + 20, Math.sin(C.ang)*R); camera.lookAt(0, C.look || 22, 0);
+        for (const b of C.bld.values()){
+          const g = b.g; if (g.scale.y < 1){ g.scale.y = Math.min(1, g.scale.y + dt*(0.35 + g.userData.grow*60)); g.position.y = g.userData.h*g.scale.y/2; }
+          const top = g.userData.h*g.scale.y; b.cap.position.y = top + 0.3; b.cap.visible = g.scale.y >= 1;
+          if (b.lb){ b.lb.position.y = top + 10; b.lb.visible = g.scale.y >= 1; }
+          if (b.pulse){ b.pulse = Math.max(0, b.pulse - dt*0.7); g.material.emissiveIntensity = 0.9 + b.pulse*1.6; }
+        }
+        C.trucks = C.trucks.filter(t=>{ t.t += dt*0.12; t.m.position.lerpVectors(t.start, t.end, t.t); if (t.t >= 1){ C.three.city.remove(t.m); return false; } return true; });
+        if (Math.random() < dt*0.5 && C.bld.size){ const ks = [...C.bld.keys()]; truck(ks[Math.floor(Math.random()*Math.min(ks.length, 12))]); }   // the city's daily traffic
+        if (!el.hidden && !document.hidden) renderer.render(scene, camera);
+        C.raf = requestAnimationFrame(frame);
+      };
+      C.raf = requestAnimationFrame(frame);
+      el.dataset.ready = '1';
+    } catch(e){ say('The city could not load ('+e.message+'). Check the internet connection.'); }
+    load();
+    C.timer = setInterval(()=>{ if (!document.hidden) load(); }, 600000);
+  }
+  // New TikTok orders: a truck leaves each product's tower, and its building glows.
+  function onOrders(nf){
+    for (const o of nf) for (const l of o.items){ const k = 'tk|'+l.name; const b = C.bld.get(k);
+      if (b){ b.p.units++; } truck(k); }
+  }
+  return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); try { C.three && C.three.renderer.dispose(); } catch(e){} }};
+}
+
 // The commentator: the Mac's own voice (speech synthesis, free) calls the action. One line at a time; a more
 // important line can cut in, small talk waits its turn or is skipped.
 const pick = a => a[Math.floor(Math.random()*a.length)];
@@ -5293,7 +5607,7 @@ function openTV(){
   const testBtn = h('button',{type:'button',onclick:()=>{ const was = T.sound; T.sound = true; chime(true); T.sound = was; }},'Test sound');
   const liveBtn = h('button',{type:'button'}, 'Show our live');
   const exitBtn = h('button',{type:'button'}, 'Exit TV');
-  const viewBtns = [['dash','Dashboard'],['map','Map'],['race','Race']].map(([k,l])=>h('button',{type:'button','aria-pressed':'false',onclick:()=>setView(k)}, l));
+  const viewBtns = [['dash','Dashboard'],['map','Map'],['race','Race'],['city','City']].map(([k,l])=>h('button',{type:'button','aria-pressed':'false',onclick:()=>setView(k)}, l));
   const views = h('div',{class:'views',role:'group','aria-label':'Screen'}, ...viewBtns);
   const talkBtn = h('button',{type:'button'}, 'Commentator on');
   const video = h('video',{autoplay:true, muted:true, playsinline:true, hidden:true});
@@ -5311,7 +5625,7 @@ function openTV(){
   const feed = h('div',{class:'feed'});
   const feedCard = h('div',{class:'card',style:'display:flex;flex-direction:column;min-height:0'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Latest orders'), feed);
   const tickInner = h('div',{}); const tick = h('div',{class:'tick'}, tickInner);
-  let tvmain = null, sideCol = null, map = null, race = null, talk = null;
+  let tvmain = null, sideCol = null, map = null, race = null, talk = null, city = null;
   const root = h('div',{id:'tv',role:'dialog','aria-label':'TV dashboard'},
     h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl',style:'align-items:center'}, liveBtn, soundBtn, kindSel, volIn, testBtn, talkBtn, views, exitBtn), clock),
     tvmain = h('div',{class:'tvmain'}, liveBox, sideCol = h('div',{class:'side'}, todayCard, goalCard, topCard), feedCard),
@@ -5346,20 +5660,28 @@ function openTV(){
   let view = 'dash';
   function setView(v){
     view = v;
-    viewBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String(['dash','map','race'][i]===v)));
+    viewBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String(['dash','map','race','city'][i]===v)));
     liveBox.hidden = sideCol.hidden = v!=='dash';
-    feedCard.hidden = v==='race';
-    if (map) map.el.hidden = v!=='map';
+    feedCard.hidden = v==='race' || v==='city';
+    if (city) city.el.hidden = v!=='city';
+    if (map){ map.el.hidden = v!=='map'; map.pause(v!=='map'); }
     if (race) race.el.hidden = v!=='race';
     if (v==='map'){
       if (!map){ window.claude.use('tiktok').then(tt=>{ map = tvMap(tt, T); tvmain.append(map.el); map.el.hidden = view!=='map'; map.el.querySelector('.fslot').append(feedCard); map.start(); }); }
       else { map.el.querySelector('.fslot').append(feedCard); setTimeout(()=>map.resize(), 50); }
     } else tvmain.append(feedCard);
+    if (v==='city'){ if (!city){ city = {el:h('div',{class:'tvcity'}), stop(){}, resize(){}, onOrders(){}}; tvmain.append(city.el); startCity(); } else setTimeout(()=>city.resize(), 50); }
     if (v==='race'){ if (!race){ race = tvRace(T, talk); tvmain.append(race.el); loadScript('js/geo-us.js').then(()=>race.paint()).catch(()=>{}); } race.paint(); }
     try { localStorage.setItem('ss_tvview', v); } catch(e){}
   }
+  // The city needs the TikTok connection (for its TikTok district) before it starts.
+  function startCity(){
+    window.claude.use('tiktok').then(async tt=>{ let ok = false; try { const st = await tt.status(); ok = st.enabled && st.connected; } catch(e){}
+      const c = tvCity(T, ok ? tt : null); city.el.replaceWith(c.el); city = c; c.el.hidden = view!=='city'; c.start(); })
+    .catch(()=>{});
+  }
   function close(){
-    if (map) map.stop(); if (race) race.stop(); if (talk) talk.stop();
+    if (map) map.stop(); if (race) race.stop(); if (talk) talk.stop(); if (city) city.stop();
     T.timers.forEach(clearInterval); if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
     try { if (T.audio) T.audio.close(); } catch(e){} try { if (T.wake) T.wake.release(); } catch(e){}
     try { if (document.fullscreenElement) document.exitFullscreen().catch(()=>{}); } catch(e){}
@@ -5437,6 +5759,7 @@ function openTV(){
           const live = [...T.orders.values()].filter(counts), gmvNow = round2(live.reduce((a,o)=>a+o.gmv,0));
           const perMin = live.filter(o=>Date.now() - o.t*1000 < 60000).length;
           if (race) race.onOrders(nf);
+          if (city) city.onOrders(nf);
           setTimeout(()=>talk && talk.onOrders(nf, gmvNow, round2(gmvNow - total), perMin), 1300);
           pop(nf.length===1 ? 'New order · '+(nf[0].items[0] ? nf[0].items[0].name : 'TikTok')+' · '+money(round2(nf[0].gmv)) : nf.length+' new orders · '+money(total));
         }
@@ -5448,7 +5771,7 @@ function openTV(){
   }).catch(()=>{ T.loaded = true; draw(); });
   draw();
   setView('dash');
-  try { const v = localStorage.getItem('ss_tvview'); if (v==='map' || v==='race') setTimeout(()=>setView(v), 0); } catch(e){}
+  try { const v = localStorage.getItem('ss_tvview'); if (v==='map' || v==='race' || v==='city') setTimeout(()=>setView(v), 0); } catch(e){}
 }
 
 /* ---------- start ---------- */

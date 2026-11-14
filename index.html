@@ -5422,6 +5422,10 @@ function tvCity(T, tt){
     const K = C.three; if (!K) return;
     const sig = C.days+'|'+C.tk.map(p=>p.product+p.units).join(',')+'|'+C.ws.map(p=>p.product+p.units).join(',');
     if (sig===C.sig) return; C.sig = sig;
+    // Same products as before, only new counts: update the numbers without rebuilding the city.
+    const names = C.days+'|'+C.tk.map(p=>p.product).join(',')+'|'+C.ws.map(p=>p.product).join(',');
+    if (names===C.names && C.bld.size){ for (const p of C.tk) relabel('tk', p); for (const p of C.ws) relabel('ws', p); hud(); return; }
+    C.names = names;
     const {THREE, scene, city} = K;
     while (city.children.length) city.remove(city.children[0]);
     C.bld.clear();
@@ -5429,7 +5433,7 @@ function tvCity(T, tt){
     const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0);
     const named = [...C.tk, ...C.ws].some(p=>/squish/i.test(p.product));
     title.textContent = named ? 'Squishy City' : BRAND()+' City';
-    sub.textContent = 'Last '+C.days+' days · '+fmtN(totalTk)+' sold on TikTok · '+fmtN(totalWs)+' sold wholesale';
+    hud();
     // Lay out a district: tallest buildings in the middle, spiralling out on a grid.
     const district = (list, cx, color, glow, kind)=>{
       if (!list.length) return;
@@ -5447,7 +5451,7 @@ function tvCity(T, tt){
         cap.position.set(g.position.x, hgt + 0.3, g.position.z); cap.userData = {h:hgt}; cap.visible = false; city.add(cap);
         let lb = null;
         if (n < 8){ lb = label(THREE, p.product, fmtN(p.units)+' sold', '#'+glow.toString(16).padStart(6,'0')); lb.renderOrder = 100 - n; lb.position.set(g.position.x, hgt + 10, g.position.z); lb.visible = false; city.add(lb); }
-        C.bld.set(kind+'|'+p.product, {g, cap, lb, p});
+        C.bld.set(kind+'|'+p.product, {g, cap, lb, p, glow, rank:n});
       });
       const pad = new THREE.Mesh(new THREE.PlaneGeometry(Math.ceil(Math.sqrt(list.length)+1)*13 + 10, Math.ceil(Math.sqrt(list.length)+1)*13 + 10), new THREE.MeshBasicMaterial({color:glow, transparent:true, opacity:0.06}));
       pad.rotation.x = -Math.PI/2; pad.position.set(cx, 0.05, 0); city.add(pad);
@@ -5537,12 +5541,31 @@ function tvCity(T, tt){
       el.dataset.ready = '1';
     } catch(e){ say('The city could not load ('+e.message+'). Check the internet connection.'); }
     load();
-    C.timer = setInterval(()=>{ if (!document.hidden) load(); }, 600000);
+    C.timer = setInterval(()=>{ if (!document.hidden && !el.hidden) load(); }, 300000);
   }
-  // New TikTok orders: a truck leaves each product's tower, and its building glows.
+  function hud(){
+    const totalTk = C.tk.reduce((a,p)=>a+p.units,0), totalWs = C.ws.reduce((a,p)=>a+p.units,0);
+    sub.textContent = 'Last '+C.days+' days · '+fmtN(totalTk)+' sold on TikTok · '+fmtN(totalWs)+' sold wholesale';
+  }
+  // Puts a building's new count on its label.
+  function relabel(kind, p){
+    const b = C.bld.get(kind+'|'+p.product), K = C.three; if (!b || !K) return;
+    b.p = p; if (!b.lb) return;
+    const lb = label(K.THREE, p.product, fmtN(p.units)+' sold', '#'+b.glow.toString(16).padStart(6,'0'));
+    lb.renderOrder = b.lb.renderOrder; lb.position.copy(b.lb.position); lb.visible = b.lb.visible;
+    K.city.remove(b.lb); try { b.lb.material.map.dispose(); b.lb.material.dispose(); } catch(e){} K.city.add(lb); b.lb = lb;
+  }
+  // New TikTok orders count straight away: the totals and labels go up, a truck leaves each product's tower.
+  // A product not in the city yet gets its building on the next refresh.
   function onOrders(nf){
-    for (const o of nf) for (const l of o.items){ const k = 'tk|'+l.name; const b = C.bld.get(k);
-      if (b){ b.p.units++; } truck(k); }
+    let changed = false;
+    for (const o of nf) for (const l of o.items){
+      const name = String(l.name || 'Item'); let p = C.tk.find(x=>x.product===name);
+      if (!p){ p = {product:name, units:0, gmv:0}; C.tk.push(p); }
+      p.units += Math.max(1, +l.qty || 1); changed = true;
+      relabel('tk', p); truck('tk|'+name);
+    }
+    if (changed){ C.tk.sort((a,b)=>b.units-a.units); hud(); }
   }
   return {el, start, onOrders, resize:()=>C.resize && C.resize(), stop(){ cancelAnimationFrame(C.raf); clearInterval(C.timer); if (C.ro) C.ro.disconnect(); try { C.three && C.three.renderer.dispose(); } catch(e){} }};
 }

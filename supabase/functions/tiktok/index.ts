@@ -391,7 +391,7 @@ async function fillCityDay(admin: any, link: any, day: string) {
   }
   await admin.from("tiktok_city_days").upsert({ company_id: link.company_id, day, orders, filled_at: new Date().toISOString() });
 }
-// Fills the last n days that are missing, plus today and yesterday when last added up over 20 minutes ago,
+// Fills the last n days that are missing, plus today (when last added up over 4 minutes ago) and yesterday (20),
 // newest first, while time allows. Returns how many days are still missing.
 // deno-lint-ignore no-explicit-any
 async function fillCity(admin: any, link: any, n: number, budgetMs: number) {
@@ -400,7 +400,7 @@ async function fillCity(admin: any, link: any, n: number, budgetMs: number) {
   const want = cityDays(n);
   const { data: have } = await admin.from("tiktok_city_days").select("day, filled_at").eq("company_id", link.company_id).gte("day", want[want.length - 1]);
   const at = new Map((have || []).map((r: { day: string; filled_at: string }) => [String(r.day).slice(0, 10), Date.parse(r.filled_at)]));
-  const todo = want.filter((d, i) => !at.has(d) || (i < 2 && Date.now() - (at.get(d) as number) > 20 * 60_000));
+  const todo = want.filter((d, i) => !at.has(d) || (i < 2 && Date.now() - (at.get(d) as number) > (i ? 20 : 4) * 60_000));
   let done = 0;
   for (const d of todo) {
     if (Date.now() - started > budgetMs) break;

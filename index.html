@@ -5394,10 +5394,11 @@ function tvCity(T, tt){
     if (tt){
       try {
         let r, guard = 0;
+        if (!C.tk.length) say('Adding up '+C.days+' days of TikTok sales… the first time takes a minute or two');
         do { r = await tt.city(C.days); C.tk = (r.products||[]).slice(0, 48); build();
           if (r.missing > 0) say('Building the city… '+(C.days - r.missing)+' of '+C.days+' days of TikTok sales added up');
         } while (r.missing > 0 && ++guard < 60 && el.isConnected);
-        say(''); C.orders = r.orders || 0;
+        say(C.tk.length ? '' : 'TikTok shows no sales in the last '+C.days+' days.'); C.orders = r.orders || 0;
       } catch(e){ say(e.message); }
     }
     build();

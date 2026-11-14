@@ -366,23 +366,30 @@ async function fillCityDay(admin: any, link: any, day: string) {
   const from = Math.floor(ptMidnight(day) / 1000), next = new Date(Date.parse(day + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
   const to = Math.floor(ptMidnight(next) / 1000);
   const by = new Map<string, { product: string; image: string; units: number; gmv: number }>();
-  let token = "", orders = 0, guard = 0;
-  do {
-    const d = await tiktok("/order/202309/orders/search", link, { page_size: 100, sort_field: "create_time", sort_order: "ASC", page_token: token }, { create_time_ge: from, create_time_lt: to });
-    // deno-lint-ignore no-explicit-any
-    for (const o of (d.orders || []) as any[]) {
-      if (o.status === "UNPAID" || o.status === "CANCELLED") continue;
-      orders++;
+  let orders = 0;
+  // A busy day is thousands of orders, 100 to a page: the day is split into 24 one-hour windows, read 8 at a
+  // time, so a whole day takes seconds instead of minutes.
+  const span = (to - from) / 24, hours = Array.from({ length: 24 }, (_, i) => [Math.round(from + i * span), i === 23 ? to : Math.round(from + (i + 1) * span)]);
+  const hour = async ([a, b]: number[]) => {
+    let token = "", guard = 0;
+    do {
+      const d = await tiktok("/order/202309/orders/search", link, { page_size: 100, sort_field: "create_time", sort_order: "ASC", page_token: token }, { create_time_ge: a, create_time_lt: b });
       // deno-lint-ignore no-explicit-any
-      for (const l of (o.line_items || []) as any[]) {
-        const k = String(l.product_name || "Item").slice(0, 200);
-        const e = by.get(k) || { product: k, image: String(l.sku_image || ""), units: 0, gmv: 0 };
-        e.units++; e.gmv += Number(l.sale_price) || 0; if (!e.image && l.sku_image) e.image = String(l.sku_image);
-        by.set(k, e);
+      for (const o of (d.orders || []) as any[]) {
+        if (o.status === "UNPAID" || o.status === "CANCELLED") continue;
+        orders++;
+        // deno-lint-ignore no-explicit-any
+        for (const l of (o.line_items || []) as any[]) {
+          const k = String(l.product_name || "Item").slice(0, 200);
+          const e = by.get(k) || { product: k, image: String(l.sku_image || ""), units: 0, gmv: 0 };
+          e.units++; e.gmv += Number(l.sale_price) || 0; if (!e.image && l.sku_image) e.image = String(l.sku_image);
+          by.set(k, e);
+        }
       }
-    }
-    token = String(d.next_page_token || "");
-  } while (token && ++guard < 400);
+      token = String(d.next_page_token || "");
+    } while (token && ++guard < 300);
+  };
+  for (let i = 0; i < hours.length; i += 8) await Promise.all(hours.slice(i, i + 8).map(hour));
   await admin.from("tiktok_product_days").delete().eq("company_id", link.company_id).eq("day", day);
   const rows = [...by.values()].map((e) => ({ company_id: link.company_id, day, product: e.product, image: e.image || null, units: e.units, gmv: Math.round(e.gmv * 100) / 100 }));
   for (let i = 0; i < rows.length; i += 500) {

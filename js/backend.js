@@ -301,7 +301,8 @@ const runtime = {
       finish: p => call({action:'finish', code:p.code, state:p.state}),
       sync: () => call({action:'sync'}),
       // Orders placed since `since` (ms), newest first: {orders:[{id, t, status, gmv, paid, items}], next_page_token}.
-      orders: (since, pageToken) => call({action:'orders', since:Math.floor((since || 0) / 1000), page_token:pageToken || ''}),
+      // by 'update': orders changed since then (shipped, delivered), for the TV order map.
+      orders: (since, pageToken, by) => call({action:'orders', since:Math.floor((since || 0) / 1000), page_token:pageToken || '', by:by || ''}),
       async disconnect(){ const {error} = await sb.rpc('tiktok_disconnect', {cid:S.company.id}); if (error) throw appError(error); },
       // Fills the flattened amounts for up to 2000 order lines pulled before the report migration; returns how many are left.
       async prepare(lim){

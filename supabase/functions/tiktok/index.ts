@@ -72,7 +72,7 @@ async function tokenCall(kind: "get" | "refresh", value: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return reply(405, { error: "Use POST" });
-  let body: { action?: string; company_id?: string; code?: string; state?: string; since?: number; page_token?: string };
+  let body: { action?: string; company_id?: string; code?: string; state?: string; since?: number; page_token?: string; by?: string };
   try { body = await req.json(); } catch { return reply(400, { error: "Send JSON" }); }
   if (!env("TIKTOK_APP_KEY") || !env("TIKTOK_APP_SECRET")) return reply(500, { error: "TikTok Shop is not set up yet (missing app key or secret)." });
 
@@ -126,8 +126,10 @@ Deno.serve(async (req) => {
       }
     }
     // Live orders for the TV dashboard: orders placed since `since` (unix seconds), newest first, a page of
-    // up to 100 at a time for as many pages as fit in a few seconds. Needs the Order permission on the
-    // TikTok app (the shop reconnects after it is added). Only what the dashboard shows is returned.
+    // up to 100 at a time for as many pages as fit in a few seconds. With by: "update", orders changed since
+    // then instead (shipped, delivered), for the order map. Needs the Order permission on the TikTok app (the
+    // shop reconnects after it is added). Only what the dashboard shows is returned: for where an order is
+    // going, the city, state and the first 3 digits of the ZIP code, never the name or street.
     if (body.action === "orders") {
       const cid = body.company_id;
       const st = await rpc("tiktok_status", { cid });   // owners and admins only
@@ -141,14 +143,20 @@ Deno.serve(async (req) => {
       const started = Date.now();
       try {
         do {
+          const byUpdate = body.by === "update";
           const d = await tiktok("/order/202309/orders/search", link,
-            { page_size: 100, sort_field: "create_time", sort_order: "DESC", page_token: token }, { create_time_ge: since });
+            { page_size: 100, sort_field: byUpdate ? "update_time" : "create_time", sort_order: "DESC", page_token: token },
+            byUpdate ? { update_time_ge: since } : { create_time_ge: since });
           // deno-lint-ignore no-explicit-any
           for (const o of (d.orders || []) as any[]) {
             const p = o.payment || {};
             // deno-lint-ignore no-explicit-any
             const items = ((o.line_items || []) as any[]).map((l) => ({ name: String(l.product_name || ""), sku: String(l.sku_name || ""), price: Number(l.sale_price) || 0, image: String(l.sku_image || "") }));
-            orders.push({ id: String(o.id), t: Number(o.create_time) || 0, status: String(o.status || ""),
+            const ad = o.recipient_address || {};
+            // deno-lint-ignore no-explicit-any
+            const lvl = (n: string) => String(((ad.district_info || []) as any[]).find((x) => x.address_level === n || String(x.address_level_name || "").toLowerCase() === ({ L1: "state", L3: "city" } as Record<string, string>)[n])?.address_name || "");
+            orders.push({ id: String(o.id), t: Number(o.create_time) || 0, ut: Number(o.update_time) || 0, status: String(o.status || ""),
+              state: lvl("L1"), city: lvl("L3"), zip3: String(ad.postal_code || "").replace(/\D/g, "").slice(0, 3),
               gmv: Number(p.original_total_product_price ?? p.sub_total) || items.reduce((a, l) => a + l.price, 0),
               paid: Number(p.total_amount) || 0, items });
           }

@@ -174,7 +174,9 @@ The **TV** button at the top of Stockroom (owners and admins) opens a full-scree
 - each new order popping up with a chime
 - best sellers, sales by hour, the sales goal, and today's Stockroom invoices along the bottom
 
-It checks TikTok for new orders every 20 seconds. Move the mouse to show the buttons; they hide again after a few seconds.
+It checks TikTok for new orders every 20 seconds.
+
+**Map view** (button at the top of TV mode) turns the screen into a 3D globe of today's TikTok orders. New orders light up where the buyer is, shipped orders fly from your warehouse, and delivered ones land in green. Beside the globe you see today's orders, how many are on the way, deliveries and the top states. It only shows cities and states, never names or addresses. The warehouse is the ZIP code in **Your business details** (on any invoice), or Hackettstown, NJ. TV mode remembers which view you had open. After this update, deploy the latest [`supabase/functions/tiktok/index.ts`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/functions/tiktok/index.ts) to the `tiktok` function. Move the mouse to show the buttons; they hide again after a few seconds.
 
 **Your TikTok LIVE on the TV.** TikTok doesn't let other sites embed a LIVE, so the dashboard shows it by sharing a browser tab. On the Mac connected to the TV:
 

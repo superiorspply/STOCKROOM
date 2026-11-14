@@ -59,6 +59,21 @@ try {
   await tv.getByRole('button', {name:'Test sound'}).click();
   check(await tv.getByRole('slider', {name:'Order sound volume'}).count() === 1, 'the order sound can be tested and its volume set');
   if (process.env.SHOT) await P.screenshot({path:process.env.SHOT});
+  // The order map: today's orders by state, shipped ones on the way, delivered ones landed.
+  await tv.getByRole('button', {name:'Map view'}).click();
+  await P.waitForFunction(() => document.querySelector('#tv .tvmap')?.dataset.ready === '1', null, {timeout:20000});
+  await tv.locator('.gstats').getByText('On the way').waitFor({timeout:10000});
+  await tv.locator('.gstats .g b').filter({hasText:/^37$/}).waitFor({timeout:10000});
+  const gs = await tv.locator('.gstats').textContent();
+  check(/151Orders today/.test(gs) && /38On the way/.test(gs) && /37Delivered today/.test(gs) && /8States today/.test(gs), 'the map counts today\'s orders, those on the way, delivered ones and states (' + gs + ')');
+  check(/1\. (TX|CA|FL|NY|IL|OH|WA|GA)19/.test(await tv.locator('.gside .tops').textContent()), 'the top states are listed');
+  check(await tv.locator('.globe canvas').count() >= 1 && await tv.locator('.tvlive').isHidden(), 'the globe is drawn, in place of the live and sales view');
+  await fetch(API + '/mock-tiktok/add-order', {method:'POST', body:JSON.stringify({ship:'577001000'})});
+  await tv.locator('.gstats .y b').filter({hasText:/^39$/}).waitFor({timeout:10000});
+  check(true, 'a newly shipped order starts flying on the map');
+  if (process.env.SHOT2) { await P.waitForTimeout(2500); await P.screenshot({path:process.env.SHOT2}); }
+  await tv.getByRole('button', {name:'Dashboard'}).click();
+  check(await tv.locator('.tvlive').isVisible() && await tv.locator('.tvmap').isHidden(), 'Dashboard goes back to the live and sales view');
   await tv.getByRole('button', {name:'Exit TV'}).click();
   check(await P.locator('#tv').count() === 0, 'Exit TV goes back to Stockroom');
 } catch(e){

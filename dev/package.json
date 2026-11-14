@@ -8,10 +8,11 @@
     "ws": "8.18.3"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@supabase/supabase-js": "2.117.2",
+    "globe.gl": "^2.45.3",
     "jspdf": "^2.5.1",
     "playwright": "1.56.1",
-    "@anthropic-ai/sdk": "0.131.0",
     "xlsx": "0.18.5"
   }
 }

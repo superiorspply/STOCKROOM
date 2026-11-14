@@ -454,6 +454,18 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .err{color:#ff8a80;font-size:1.8vh;margin:0}
 #tv .pop{position:absolute;left:50%;top:8%;transform:translateX(-50%);background:#e5192b;color:#fff;font-weight:700;font-size:3.4vh;border-radius:2vh;padding:1.4vh 2.4vw;box-shadow:0 2vh 6vh rgba(0,0,0,.5);animation:tvpop 3.2s ease-out forwards;max-width:90%;text-align:center}
 @keyframes tvpop{0%{opacity:0;transform:translate(-50%,-2vh) scale(.9)}10%{opacity:1;transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0}}
+#tv [hidden]{display:none!important}
+#tv .fslot>.card{flex:1}
+#tv .tvmap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.4fr);gap:1.4vw;min-height:0}
+#tv .globe{position:relative;border-radius:2vh;overflow:hidden;background:#050506;border:1px solid #1c1c21;min-height:0}
+#tv .globe .gmsg{position:absolute;inset:0;display:grid;place-items:center;color:#9a9aa6;font-size:2vh;text-align:center;padding:4vh}
+#tv .gside{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:1.4vh;min-height:0}
+#tv .gstats{display:grid;grid-template-columns:1fr 1fr;gap:1.2vh 1vw}
+#tv .gstats b{display:block;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:4.4vh;line-height:1.05;font-variant-numeric:tabular-nums}
+#tv .gstats span{font-size:1.6vh;color:#9a9aa6;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+#tv .gstats .r b{color:#ff5a64}#tv .gstats .y b{color:#ffb84d}#tv .gstats .g b{color:#3ddc97}
+#tv .legend{position:absolute;left:1.4vw;bottom:1.6vh;display:flex;gap:1.4vw;font-size:1.6vh;color:#c3c3cc;background:rgba(5,5,6,.6);padding:.6vh 1vw;border-radius:99px}
+#tv .legend i{display:inline-block;width:1vh;height:1vh;border-radius:50%;margin-right:.5vw;vertical-align:middle}
 @media (prefers-reduced-motion:reduce){#tv .onair.on,#tv .feed .o.new,#tv .tick div,#tv .pop{animation:none}}
 </style>
 </head>
@@ -4963,11 +4975,121 @@ function tvSound(a, kind, big, vol){
   bell(t0 + 0.06); if (big) bell(t0 + 0.4);
   coins(t0 + 0.12, big ? 36 : 24, 0.032);
 }
+// TV order map: a 3D globe (globe.gl, loaded only when the map is opened) with today's TikTok orders. New
+// orders light up where the buyer is, shipped orders fly as arcs from the warehouse, and delivered ones land
+// with a green ring. Places come from js/geo-us.js: the middle of the buyer's 3-digit ZIP area, or their
+// state; never a name or street. The warehouse is the ZIP in Your business details, or Hackettstown, NJ.
+const TV_HOME = {lat:40.85, lng:-74.83, name:'Hackettstown, NJ'};
+const loadScript = src => new Promise((res, rej)=>{ if ([...document.scripts].some(s=>s.src===src)) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = ()=>rej(new Error('Could not load '+src)); document.head.append(s); });
+function tvGeo(o){
+  const G = window.STOCKROOM_GEO; if (!G) return null;
+  const st = G.names[String(o.state||'').toLowerCase()] || String(o.state||'').toUpperCase();
+  const p = G.z3[o.zip3] || G.st[st]; if (!p) return null;
+  let hsh = 0; for (const ch of String(o.id)) hsh = (hsh*31 + ch.charCodeAt(0))|0;   // spread dots in an area a little, the same way every time
+  return {lat:p[0] + ((hsh & 255)/255 - 0.5)*0.5, lng:p[1] + (((hsh>>8) & 255)/255 - 0.5)*0.6, st};
+}
+function tvHome(){
+  const m = /\b(\d{5})(?:-\d{4})?\b/.exec(String(state.business||'')), G = window.STOCKROOM_GEO;
+  const p = m && G && G.z3[m[1].slice(0,3)];
+  return p ? {lat:p[0], lng:p[1], name:'Warehouse'} : TV_HOME;
+}
+function tvMap(tt, T){
+  const M = {orders:new Map(), last:0, day:ptNow().start, loaded:false, globe:null, rings:[], timer:null, err:''};
+  const box = h('div',{class:'globe'}, h('div',{class:'gmsg'}, 'Loading the map…'));
+  const legend = h('div',{class:'legend'}, h('span',{}, h('i',{style:'background:#ff5a64'}), 'New order'), h('span',{}, h('i',{style:'background:#ffb84d'}), 'On the way'), h('span',{}, h('i',{style:'background:#3ddc97'}), 'Delivered'));
+  const stats = h('div',{class:'gstats'}), topStates = h('div',{class:'tops'});
+  const el = h('div',{class:'tvmap'}, box, h('div',{class:'gside'}, h('div',{class:'card'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Today across the country'), stats), h('div',{class:'card'}, h('div',{class:'lbl'},'Top states today'), topStates), h('div',{class:'fslot',style:'display:flex;min-height:0'})));
+  const home = tvHome();
+  const moving = s => s==='AWAITING_COLLECTION' || s==='IN_TRANSIT';
+  const todayO = ()=>[...M.orders.values()];
+  function data(){
+    const now = Date.now(), all = todayO(), pts = [], arcs = [];
+    for (const o of all){
+      const g = tvGeo(o); if (!g) continue;
+      if (o.status==='DELIVERED'){ if (o.ut*1000 >= M.day) pts.push({lat:g.lat, lng:g.lng, c:'#3ddc97', r:0.16}); }
+      else if (moving(o.status)) arcs.push({o, s:[home.lat, home.lng], e:[g.lat, g.lng]});
+      else if (o.t*1000 >= M.day && o.status!=='CANCELLED' && o.status!=='UNPAID') pts.push({lat:g.lat, lng:g.lng, c:'#ff5a64', r:0.2});
+    }
+    arcs.sort((a,b)=>b.o.ut-a.o.ut);
+    M.rings = M.rings.filter(r=>now - r.at < 4000);
+    return {pts, arcs:arcs.slice(0, 400), rings:M.rings};
+  }
+  function drawStats(){
+    const all = todayO(), newToday = all.filter(o=>o.t*1000>=M.day && o.status!=='CANCELLED' && o.status!=='UNPAID');
+    const way = all.filter(o=>moving(o.status)).length, deliv = all.filter(o=>o.status==='DELIVERED' && o.ut*1000>=M.day).length;
+    const byState = new Map(); newToday.forEach(o=>{ const g = tvGeo(o); const k = g ? g.st : ''; if (k) byState.set(k, (byState.get(k)||0)+1); });
+    stats.replaceChildren(
+      h('div',{class:'r'}, h('b',{}, fmtN(newToday.length)), h('span',{},'Orders today')),
+      h('div',{class:'y'}, h('b',{}, fmtN(way)), h('span',{},'On the way')),
+      h('div',{class:'g'}, h('b',{}, fmtN(deliv)), h('span',{},'Delivered today')),
+      h('div',{}, h('b',{}, fmtN(byState.size)), h('span',{},'States today')));
+    const top = [...byState.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
+    topStates.replaceChildren(...(top.length ? top.map(([k,n],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(n)))) : [h('div',{style:'color:#9a9aa6'}, M.loaded ? 'No orders yet today.' : 'Loading…')]));
+  }
+  function paint(){
+    drawStats();
+    if (!M.globe) return;
+    const d = data();
+    M.globe.pointsData(d.pts).arcsData(d.arcs).ringsData(d.rings);
+  }
+  async function pull(){
+    const day = ptNow().start;
+    if (day!==M.day){ M.day = day; M.orders.clear(); M.last = 0; }
+    const since = M.last ? Math.max(M.day - DAY, M.last*1000 - 180000) : M.day;
+    let token = '', guard = 0;
+    do {
+      const r = await tt.orders(since, token, 'update');
+      for (const o of r.orders){
+        const was = M.orders.get(o.id), g = M.loaded ? tvGeo(o) : null;
+        if (g && (!was || was.status!==o.status)){
+          if (o.status==='DELIVERED') M.rings.push({lat:g.lat, lng:g.lng, c:'61,220,151', at:Date.now()});
+          else if (!was && !moving(o.status)) M.rings.push({lat:g.lat, lng:g.lng, c:'255,90,100', at:Date.now()});
+        }
+        M.orders.set(o.id, o); M.last = Math.max(M.last, o.ut || o.t);
+      }
+      token = r.next_page_token || '';
+      if (!M.loaded) drawStats();
+    } while (token && ++guard < 100);
+    M.loaded = true; paint();
+  }
+  async function start(){
+    try {
+      await loadScript('js/geo-us.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/globe.gl@2.45.3/dist/globe.gl.min.js');
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));   // let the layout settle so the globe fills its box
+      const W = box.clientWidth || 800, H = box.clientHeight || 600;
+      box.replaceChildren();
+      const g = window.Globe()(box)
+        .width(W).height(H).backgroundColor('#050506')
+        .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-night.jpg')
+        .atmosphereColor('#ff5a64').atmosphereAltitude(0.16)
+        .pointLat('lat').pointLng('lng').pointColor('c').pointRadius('r').pointAltitude(0.012)
+        .arcStartLat(d=>d.s[0]).arcStartLng(d=>d.s[1]).arcEndLat(d=>d.e[0]).arcEndLng(d=>d.e[1])
+        .arcColor(()=>['rgba(255,90,100,0.95)','rgba(255,184,77,0.95)']).arcStroke(0.35).arcAltitudeAutoScale(0.35)
+        .arcDashLength(0.35).arcDashGap(1.2).arcDashInitialGap(()=>Math.random()*1.5).arcDashAnimateTime(2600)
+        .ringLat('lat').ringLng('lng').ringColor(r=>t=>'rgba('+r.c+','+(1-t)+')').ringMaxRadius(3.2).ringPropagationSpeed(2.4).ringRepeatPeriod(700)
+        .labelsData([{lat:home.lat, lng:home.lng, text:home.name}]).labelLat('lat').labelLng('lng').labelText('text').labelSize(1.1).labelDotRadius(0.45).labelColor(()=>'#ffffff').labelResolution(2)
+        .pointOfView({lat:37.5, lng:-96, altitude:1.35});
+      try { const c = g.controls(); c.enableZoom = false; c.autoRotate = false; } catch(e){}
+      box.append(legend); M.globe = g; el.dataset.ready = '1';
+      // Drift slowly across the country, east and back, so it never sits still.
+      let east = true; M.drift = setInterval(()=>{ east = !east; try { g.pointOfView({lat:east ? 38.5 : 36.5, lng:east ? -90 : -102, altitude:1.3}, 28000); } catch(e){} }, 30000);
+      M.resize = ()=>{ try { if (box.clientWidth) g.width(box.clientWidth).height(box.clientHeight); } catch(e){} };
+      window.addEventListener('resize', M.resize);
+      if (window.ResizeObserver){ M.ro = new ResizeObserver(()=>M.resize()); M.ro.observe(box); }
+    } catch(e){ box.replaceChildren(h('div',{class:'gmsg'}, 'The map could not load ('+e.message+'). Check the internet connection.')); }
+    try { await pull(); } catch(e){ box.append(h('div',{class:'gmsg',style:'inset:auto 0 0 0;place-items:end center'}, e.message)); }
+    M.timer = setInterval(()=>{ if (!document.hidden) pull().catch(()=>{}); }, T.pollMs);
+    M.repaint = setInterval(()=>{ if (M.rings.length) paint(); }, 1500);
+  }
+  return {el, start, stop(){ clearInterval(M.timer); clearInterval(M.drift); clearInterval(M.repaint); if (M.resize) window.removeEventListener('resize', M.resize); if (M.ro) M.ro.disconnect(); try { M.globe && M.globe._destructor && M.globe._destructor(); } catch(e){} }, resize:()=>M.resize && M.resize()};
+}
 function openTV(){
   if ($('#tv')) return;
   const T = {orders:new Map(), loaded:false, stream:null, sound:true, audio:null, timers:[], last:0, day:ptNow().start, err:'', goal:null, wake:null};
   try { T.sound = localStorage.getItem('ss_tvsound')!=='0'; } catch(e){}
   const pollMs = (()=>{ try { return Math.max(2000, +localStorage.getItem('ss_tvpoll') || 20000); } catch(e){ return 20000; } })();
+  T.pollMs = pollMs;
   const onair = h('span',{class:'onair'},'LIVE');
   const clock = h('span',{class:'clock'});
   const soundBtn = h('button',{type:'button'}, T.sound ? 'Sound on' : 'Sound off');
@@ -4982,6 +5104,7 @@ function openTV(){
   const testBtn = h('button',{type:'button',onclick:()=>{ const was = T.sound; T.sound = true; chime(true); T.sound = was; }},'Test sound');
   const liveBtn = h('button',{type:'button'}, 'Show our live');
   const exitBtn = h('button',{type:'button'}, 'Exit TV');
+  const mapBtn = h('button',{type:'button'}, 'Map view');
   const video = h('video',{autoplay:true, muted:true, playsinline:true, hidden:true});
   const ph = h('div',{class:'ph'},
     h('h2',{style:"font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:4vh;margin:0"},'Show your TikTok LIVE here'),
@@ -4997,9 +5120,10 @@ function openTV(){
   const feed = h('div',{class:'feed'});
   const feedCard = h('div',{class:'card',style:'display:flex;flex-direction:column;min-height:0'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Latest orders'), feed);
   const tickInner = h('div',{}); const tick = h('div',{class:'tick'}, tickInner);
+  let tvmain = null, sideCol = null, map = null;
   const root = h('div',{id:'tv',role:'dialog','aria-label':'TV dashboard'},
-    h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl',style:'align-items:center'}, liveBtn, soundBtn, kindSel, volIn, testBtn, exitBtn), clock),
-    h('div',{class:'tvmain'}, liveBox, h('div',{class:'side'}, todayCard, goalCard, topCard), feedCard),
+    h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl',style:'align-items:center'}, liveBtn, soundBtn, kindSel, volIn, testBtn, mapBtn, exitBtn), clock),
+    tvmain = h('div',{class:'tvmain'}, liveBox, sideCol = h('div',{class:'side'}, todayCard, goalCard, topCard), feedCard),
     tick);
   document.body.append(root); document.body.classList.add('locked');
   try { root.requestFullscreen && root.requestFullscreen().catch(()=>{}); } catch(e){}
@@ -5024,7 +5148,19 @@ function openTV(){
   }
   liveBtn.onclick = shareLive;
   soundBtn.onclick = ()=>{ T.sound = !T.sound; soundBtn.textContent = T.sound ? 'Sound on' : 'Sound off'; try { localStorage.setItem('ss_tvsound', T.sound ? '1' : '0'); } catch(e){} if (T.sound) chime(); };
+  // Map view: the order globe takes the screen; the order list moves beside it.
+  mapBtn.onclick = ()=>{
+    const on = mapBtn.textContent==='Map view';
+    mapBtn.textContent = on ? 'Dashboard' : 'Map view';
+    liveBox.hidden = sideCol.hidden = on;
+    if (on){
+      if (!map){ window.claude.use('tiktok').then(tt=>{ map = tvMap(tt, T); tvmain.append(map.el); map.el.querySelector('.fslot').append(feedCard); map.start(); }); }
+      else { map.el.hidden = false; map.el.querySelector('.fslot').append(feedCard); setTimeout(()=>map.resize(), 50); }
+    } else if (map){ map.el.hidden = true; tvmain.append(feedCard); }
+    try { localStorage.setItem('ss_tvview', on ? 'map' : 'dash'); } catch(e){}
+  };
   function close(){
+    if (map) map.stop();
     T.timers.forEach(clearInterval); if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
     try { if (T.audio) T.audio.close(); } catch(e){} try { if (T.wake) T.wake.release(); } catch(e){}
     try { if (document.fullscreenElement) document.exitFullscreen().catch(()=>{}); } catch(e){}
@@ -5108,6 +5244,7 @@ function openTV(){
     T.timers.push(setInterval(()=>{ if (!document.hidden || T.stream) tickOrders(); }, pollMs));
   }).catch(()=>{ T.loaded = true; draw(); });
   draw();
+  try { if (localStorage.getItem('ss_tvview')==='map') setTimeout(()=>mapBtn.click(), 0); } catch(e){}
 }
 
 /* ---------- start ---------- */

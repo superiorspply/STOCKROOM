@@ -288,10 +288,16 @@ function mockOperator(body){
 const TT = {key:'tt-app-key', secret:'tt-app-secret', calls:[], orders:[]};
 // Live orders for the TV dashboard: 150 placed over the last quarter hour (so the dashboard pages through them),
 // plus any a test adds with POST /mock-tiktok/add-order.
-const mockOrder = (n, t, name, price) => ({id:'57700' + n, status:'AWAITING_SHIPMENT', create_time:t,
+// Where the stand-in orders go: TikTok's recipient address, with the state and city as "district" levels.
+const MOCK_PLACES = [['Texas','Houston','77002'],['California','Los Angeles','90012'],['Florida','Miami','33101'],['New York','Brooklyn','11201'],['Illinois','Chicago','60601'],['Ohio','Columbus','43215'],['Washington','Seattle','98101'],['Georgia','Atlanta','30303']];
+const mockAddr = n => { const [st, city, zip] = MOCK_PLACES[n % MOCK_PLACES.length];
+  return {postal_code:zip, region_code:'US', district_info:[{address_level_name:'Country', address_level:'L0', address_name:'United States'}, {address_level_name:'State', address_level:'L1', address_name:st}, {address_level_name:'County', address_level:'L2', address_name:'County'}, {address_level_name:'City', address_level:'L3', address_name:city}]}; };
+const mockOrder = (n, t, name, price) => ({id:'57700' + n, status:'AWAITING_SHIPMENT', create_time:t, update_time:t, recipient_address:mockAddr(n),
   payment:{currency:'USD', original_total_product_price:String(price), sub_total:String(price), total_amount:String(price + 3)},
   line_items:[{id:'L' + n, product_name:name, sku_name:'Default', sale_price:String(price), sku_image:''}]});
+const mockSeed = () => { TT.orders.forEach((o, i) => { if (i < 150 && i % 4 === 1){ o.status = 'IN_TRANSIT'; o.update_time = o.create_time + 20; } if (i < 150 && i % 4 === 2){ o.status = 'DELIVERED'; o.update_time = o.create_time + 25; } }); };
 for (let i = 0; i < 150; i++) TT.orders.push(mockOrder(1000 + i, Math.floor(Date.now() / 1000) - 30 - i * 5, i % 3 ? 'Squishy Butter' : 'Cloud Slime', i % 3 ? 10 : 15));
+mockSeed();
 export const MOCK_TIKTOK = {
 // Shaped like TikTok's: top-level totals add up to the payout; the breakdowns are their detail; supplementary
 // components repeat amounts for reference. TikTok holds $5 of T1 in reserve: its line counts that, S1's total
@@ -323,7 +329,8 @@ async function mockTikTok(req, res, url){
   if (q.shop_cipher !== 'CIPHER1') return send(res, 200, {code:106011, message:'shop_cipher missing'});
   if (path === '/order/202309/orders/search'){
     const b = JSON.parse(raw || '{}'), size = Math.min(100, +q.page_size || 20), from = +(q.page_token || 0);
-    const list = TT.orders.filter(o => o.create_time >= (b.create_time_ge || 0)).sort((x, y) => y.create_time - x.create_time);
+    const byU = b.update_time_ge != null, key = byU ? 'update_time' : 'create_time', min = byU ? b.update_time_ge : (b.create_time_ge || 0);
+    const list = TT.orders.filter(o => o[key] >= min).sort((x, y) => y[key] - x[key]);
     const page = list.slice(from, from + size);
     return send(res, 200, {code:0, data:{orders:page, total_count:list.length, next_page_token:from + size < list.length ? String(from + size) : ''}});
   }
@@ -376,7 +383,8 @@ const api = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/functions/v1/')) return await functions(req, res, url);
     if (url.pathname.startsWith('/mock-anthropic')) return await mockClaude(req, res, url);
     if (url.pathname === '/mock-tiktok/calls') return send(res, 200, TT.calls);
-    if (url.pathname === '/mock-tiktok/add-order'){ const b = JSON.parse((await readBody(req)).toString() || '{}'); if (b.reset){ TT.orders.splice(150); return send(res, 200, {ok:true}); } TT.orders.push(mockOrder(5000 + TT.orders.length, Math.floor(Date.now() / 1000), b.name || 'Squishy Butter', b.price || 12)); return send(res, 200, {ok:true}); }
+    if (url.pathname === '/mock-tiktok/add-order'){ const b = JSON.parse((await readBody(req)).toString() || '{}'); if (b.reset){ TT.orders.splice(150); TT.orders.forEach(o => { o.status = 'AWAITING_SHIPMENT'; o.update_time = o.create_time; }); mockSeed(); return send(res, 200, {ok:true}); }
+      if (b.ship || b.deliver){ const o = TT.orders.find(x => x.id === (b.ship || b.deliver)); if (o){ o.status = b.ship ? 'IN_TRANSIT' : 'DELIVERED'; o.update_time = Math.floor(Date.now() / 1000); } return send(res, 200, {ok:!!o}); } TT.orders.push(mockOrder(5000 + TT.orders.length, Math.floor(Date.now() / 1000), b.name || 'Squishy Butter', b.price || 12)); return send(res, 200, {ok:true}); }
     if (url.pathname.startsWith('/mock-tiktok')) return await mockTikTok(req, res, url);
     send(res, 404, {message:'not found'});
   } catch(e){ console.error(e); send(res, 500, {message:String(e.message || e)}); }

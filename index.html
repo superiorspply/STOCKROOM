@@ -418,7 +418,11 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .tvctl{display:flex;gap:.6vw;transition:opacity .4s}
 #tv.idle .tvctl{opacity:0}
 #tv.idle{cursor:none}
-#tv .tvctl button{background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.8vh 1.2vw;font:inherit;font-size:1.6vh;cursor:pointer}
+#tv .tvctl button{background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.8vh .9vw;font:inherit;font-size:1.5vh;cursor:pointer;white-space:nowrap}
+#tv .tvctl{flex-wrap:nowrap;min-width:0;gap:.5vw}
+#tv .tvctl>*{flex-shrink:0}
+#tv .clock{white-space:nowrap}
+#tv .tvtop h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:16vw}
 #tv .tvmain{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,.78fr);gap:1.4vw;min-height:0}
 #tv .tvlive{position:relative;background:#000;border:1px solid #1c1c21;border-radius:2vh;overflow:hidden;display:grid;place-items:center;min-height:0}
 #tv .tvlive video{width:100%;height:100%;object-fit:contain;display:block}
@@ -466,6 +470,41 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .gstats .r b{color:#ff5a64}#tv .gstats .y b{color:#ffb84d}#tv .gstats .g b{color:#3ddc97}
 #tv .legend{position:absolute;left:1.4vw;bottom:1.6vh;display:flex;gap:1.4vw;font-size:1.6vh;color:#c3c3cc;background:rgba(5,5,6,.6);padding:.6vh 1vw;border-radius:99px}
 #tv .legend i{display:inline-block;width:1vh;height:1vh;border-radius:50%;margin-right:.5vw;vertical-align:middle}
+#tv .tvrace{grid-column:1/-1;display:grid;grid-template-rows:auto minmax(0,1fr);gap:1.4vh;min-height:0;position:relative}
+#tv .rhead{display:flex;align-items:flex-end;justify-content:space-between;gap:2vw}
+#tv .rhead h3{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:5vh;letter-spacing:-.02em;line-height:1}
+#tv .rhead .sub{color:#9a9aa6;font-size:2vh;margin-top:.6vh}
+#tv .rclock{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:5vh;font-variant-numeric:tabular-nums;text-align:right;line-height:1}
+#tv .rclock small{display:block;font-size:1.6vh;color:#9a9aa6;letter-spacing:.08em;text-transform:uppercase;margin-top:.6vh}
+#tv .rmodes{display:flex;gap:.6vw;margin-top:1vh}
+#tv .rmodes button{background:#1c1c21;color:#c3c3cc;border:1px solid #27272e;border-radius:99px;padding:.6vh 1.2vw;font:inherit;font-size:1.6vh;cursor:pointer}
+#tv .rmodes button[aria-pressed=true]{background:#e5192b;color:#fff;border-color:#e5192b}
+#tv.idle .rmodes{opacity:0;transition:opacity .4s}
+#tv .track{position:relative;background:repeating-linear-gradient(90deg,#0d1210 0 8vw,#0f1512 8vw 16vw);border:1px solid #1c1c21;border-radius:2vh;display:flex;flex-direction:column;justify-content:space-evenly;padding:1vh 0;overflow:hidden}
+#tv .track::after{content:'';position:absolute;top:0;bottom:0;right:7vw;width:1.6vw;background:repeating-conic-gradient(#fff 0 25%,#111 0 50%) 0 0/1.6vw 1.6vw;opacity:.85}
+#tv .lane{position:relative;flex:1;display:flex;align-items:center;border-bottom:1px dashed rgba(255,255,255,.08);min-height:0}
+#tv .lane:last-child{border-bottom:0}
+#tv .lane .lname{position:absolute;left:1.4vw;font-size:1.7vh;color:#9a9aa6;z-index:1;white-space:nowrap}
+#tv .runner{position:absolute;left:2vw;display:flex;align-items:center;gap:.8vw;transition:left 1.6s cubic-bezier(.3,.8,.3,1);z-index:2}
+#tv .runner .av{width:7vh;height:7vh;border-radius:50%;background:linear-gradient(160deg,#e5192b,#7a0d17);border:.4vh solid #fff;box-shadow:0 .8vh 2vh rgba(0,0,0,.5);display:grid;place-items:center;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-weight:800;font-size:2.8vh;letter-spacing:-.02em;animation:gallop .5s ease-in-out infinite alternate}
+#tv .runner.lead .av{border-color:#ffb84d;box-shadow:0 0 0 .6vh rgba(255,184,77,.25),0 .8vh 2vh rgba(0,0,0,.5)}
+#tv .runner .tag{display:flex;flex-direction:column;line-height:1.15}
+#tv .runner .tag b{font-size:2.4vh;white-space:nowrap;max-width:24vw;overflow:hidden;text-overflow:ellipsis}
+#tv .runner .tag span{font-size:1.8vh;color:#c3c3cc;font-variant-numeric:tabular-nums}
+#tv .runner .rank{font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:3.4vh;font-weight:800;color:#ffb84d;min-width:3vw;text-align:right}
+@keyframes gallop{from{transform:translateY(-.5vh) rotate(-4deg)}to{transform:translateY(.5vh) rotate(4deg)}}
+#tv .winner{position:absolute;inset:0;display:grid;place-items:center;background:rgba(5,5,6,.82);z-index:5;text-align:center;animation:tvpop2 .5s ease-out}
+#tv .winner .w{display:grid;gap:1.6vh;justify-items:center}
+#tv .runner .av.pic,#tv .winner .av.pic{background:#2a2a31 center/cover no-repeat}
+#tv .winner .av{width:22vh;height:22vh;border-radius:50%;background:linear-gradient(160deg,#e5192b,#7a0d17);border:1vh solid #ffb84d;box-shadow:0 0 8vh rgba(255,184,77,.5);display:grid;place-items:center;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-weight:800;font-size:9vh}
+#tv .winner h2{margin:0;font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:7vh;letter-spacing:-.02em}
+#tv .winner p{margin:0;font-size:2.6vh;color:#c3c3cc}
+@keyframes tvpop2{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+#tv .views{display:flex;border:1px solid #27272e;border-radius:1vh;overflow:hidden}
+#tv .views button{border:0;border-radius:0;background:#1c1c21}
+#tv .views button[aria-pressed=true]{background:#e5192b;color:#fff}
+#tv .say{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);background:rgba(5,5,6,.85);border:1px solid #27272e;color:#fff;font-size:2.4vh;padding:1vh 2vw;border-radius:99px;z-index:6;max-width:80%;text-align:center;animation:tvpop2 .3s ease-out}
+@media (prefers-reduced-motion:reduce){#tv .runner .av{animation:none}#tv .runner{transition:none}}
 @media (prefers-reduced-motion:reduce){#tv .onair.on,#tv .feed .o.new,#tv .tick div,#tv .pop{animation:none}}
 </style>
 </head>
@@ -5024,7 +5063,7 @@ function tvMap(tt, T){
       h('div',{class:'g'}, h('b',{}, fmtN(deliv)), h('span',{},'Delivered today')),
       h('div',{}, h('b',{}, fmtN(byState.size)), h('span',{},'States today')));
     const top = [...byState.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
-    topStates.replaceChildren(...(top.length ? top.map(([k,n],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(n)))) : [h('div',{style:'color:#9a9aa6'}, M.loaded ? 'No orders yet today.' : 'Loading…')]));
+    topStates.replaceChildren(...(top.length ? top.map(([k,n],i)=>h('div',{}, h('span',{}, (i+1)+'. '+k), h('b',{}, fmtN(n)))) : [h('div',{style:'color:#9a9aa6'}, M.loaded ? 'No orders yet today.' : 'Loading today\u2019s orders… '+fmtN(M.orders.size))]));
   }
   function paint(){
     drawStats();
@@ -5048,7 +5087,7 @@ function tvMap(tt, T){
         M.orders.set(o.id, o); M.last = Math.max(M.last, o.ut || o.t);
       }
       token = r.next_page_token || '';
-      if (!M.loaded) drawStats();
+      if (!M.loaded) paint();   // draw as it loads, so the globe fills in page by page
     } while (token && ++guard < 100);
     M.loaded = true; paint();
   }
@@ -5084,6 +5123,156 @@ function tvMap(tt, T){
   }
   return {el, start, stop(){ clearInterval(M.timer); clearInterval(M.drift); clearInterval(M.repaint); if (M.resize) window.removeEventListener('resize', M.resize); if (M.ro) M.ro.disconnect(); try { M.globe && M.globe._destructor && M.globe._destructor(); } catch(e){} }, resize:()=>M.resize && M.resize()};
 }
+// TV Race: US states race across the screen; every TikTok order from a state moves it forward. A race runs for
+// the clock hour, a 15-minute sprint, or a LIVE race started and finished by hand. The leader sits near the
+// line, the rest in proportion; at the end the winning state crosses it and gets a winner screen.
+function tvRace(T, talk){
+  const R = {mode:'hour', kind:'states', start:0, end:0, leader:'', lastNames:[], over:null};
+  try { const m = localStorage.getItem('ss_tvrace'); if (['hour','sprint','live'].includes(m)) R.mode = m; } catch(e){}
+  try { const k = localStorage.getItem('ss_tvracekind'); if (k==='products') R.kind = k; } catch(e){}
+  // What races: US states (each order moves its state) or products (each item sold moves its product).
+  const kindBtns = [['states','States'],['products','Products']].map(([k,l])=>{ const b = h('button',{type:'button','aria-pressed':String(R.kind===k),onclick:()=>{ R.kind = k; try { localStorage.setItem('ss_tvracekind', k); } catch(e){} kindBtns.forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.k===k))); track.replaceChildren(); lanes.clear(); R.leader = ''; R.lastNames = []; paint(); }}, l); b.dataset.k = k; return b; });
+  const title = h('h3',{}), sub = h('div',{class:'sub'}), clockEl = h('div',{class:'rclock'});
+  const modeBtns = [['hour','Hourly race'],['sprint','15-min sprint'],['live','LIVE race']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(R.mode===k),onclick:()=>{ R.mode = k; try { localStorage.setItem('ss_tvrace', k); } catch(e){} modeBtns.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.k===k))); begin(true); }}, l));
+  modeBtns.forEach((b,i)=>b.dataset.k = ['hour','sprint','live'][i]);
+  const finishBtn = h('button',{type:'button',onclick:()=>{ if (R.mode==='live') finish(); }},'Finish race');
+  const track = h('div',{class:'track'});
+  const el = h('div',{class:'tvrace'}, h('div',{class:'rhead'}, h('div',{}, title, sub, h('div',{class:'rmodes'}, ...kindBtns, h('span',{style:'width:1.2vw'}), ...modeBtns, finishBtn)), clockEl), track);
+  const lanes = new Map();
+  const slot = ms => R.mode==='sprint' ? 15*60000 : 3600000;
+  function begin(announce){
+    const now = Date.now();
+    R.over && R.over.remove(); R.over = null; R.leader = ''; R.lastNames = [];
+    if (R.mode==='live'){ R.start = now; R.end = Infinity; }
+    else { const s = slot(); R.start = Math.floor(now/s)*s; R.end = R.start + s; }
+    finishBtn.hidden = R.mode!=='live';
+    track.replaceChildren(); lanes.clear(); paint();
+    if (announce) talk.say(pick(['And they’re off!','The gates are open, and they’re off!','Here we go! A brand new race!']), 2);
+  }
+  const counted = o => o.status!=='UNPAID' && o.status!=='CANCELLED';
+  const stateOf = o => { const n = String(o.state||'').trim(); if (!n) return null; const G = window.STOCKROOM_GEO;
+    const ab = G ? (G.names[n.toLowerCase()] || (n.length===2 ? n.toUpperCase() : '')) : (n.length===2 ? n.toUpperCase() : '');
+    return {name:n.length===2 && G ? (Object.keys(G.names).find(k=>G.names[k]===ab) || n).replace(/\b\w/g, c=>c.toUpperCase()) : n.replace(/\b\w/g, c=>c.toUpperCase()), ab:ab || n.slice(0,2).toUpperCase()}; };
+  function productStandings(){
+    const m = new Map();
+    for (const o of T.orders.values()){ if (!counted(o) || o.t*1000 < R.start || o.t*1000 >= R.end) continue;
+      for (const l of o.items){ const k = l.name || 'Item'; const e = m.get(k) || {name:k, n:0, rev:0, img:l.image || ''}; e.n++; e.rev += l.price; if (!e.img && l.image) e.img = l.image; m.set(k, e); } }
+    let list = [...m.values()].sort((a,b)=>b.n-a.n || b.rev-a.rev);
+    // Before anything sells, line up today's best sellers at the start.
+    if (list.length < 3){ const day = new Map(); for (const o of T.orders.values()) if (counted(o)) for (const l of o.items){ const e = day.get(l.name) || {name:l.name, img:l.image||'', d:0}; e.d++; day.set(l.name, e); }
+      for (const e of [...day.values()].sort((a,b)=>b.d-a.d)) if (list.length < 6 && !list.some(x=>x.name===e.name)) list.push({name:e.name, n:0, rev:0, img:e.img}); }
+    return list.slice(0, 7);
+  }
+  function standings(){
+    if (R.kind==='products') return productStandings();
+    const m = new Map();
+    for (const o of T.orders.values()){ if (!counted(o) || o.t*1000 < R.start || o.t*1000 >= R.end) continue;
+      const st = stateOf(o); if (!st) continue;
+      const e = m.get(st.name) || {name:st.name, ab:st.ab, n:0, rev:0}; e.n++; e.rev += o.gmv; m.set(st.name, e); }
+    let list = [...m.values()].sort((a,b)=>b.n-a.n || b.rev-a.rev);
+    // Before anyone orders, line up today's busiest states at the start.
+    if (list.length < 3){ const day = new Map(); for (const o of T.orders.values()) if (counted(o)){ const st = stateOf(o); if (!st) continue; const e = day.get(st.name) || {name:st.name, ab:st.ab, d:0}; e.d++; day.set(st.name, e); }
+      for (const e of [...day.values()].sort((a,b)=>b.d-a.d)) if (list.length < 6 && !list.some(x=>x.name===e.name)) list.push({name:e.name, ab:e.ab, n:0, rev:0}); }
+    return list.slice(0, 8);
+  }
+  const hourLabel = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:R.mode==='sprint' ? '2-digit' : undefined});
+  function paint(){
+    const list = standings(), top = list[0] ? list[0].n : 0, scale = Math.max(top*1.12, 8);
+    title.textContent = R.mode==='live' ? 'The LIVE Race' : R.mode==='sprint' ? 'The '+hourLabel(R.start)+' Sprint' : 'The '+hourLabel(R.start)+' Race';
+    const total = list.reduce((a,e)=>a+e.n,0);
+    sub.textContent = R.kind==='products' ? fmtN(total)+' sold this race · every sale moves its product forward' : fmtN(total)+' order'+(total===1 ? '' : 's')+' this race · every order moves its state forward';
+    const seen = new Set();
+    list.forEach((e,i)=>{
+      seen.add(e.name);
+      let L = lanes.get(e.name);
+      if (!L){
+        const av = h('div',{class:'av'+(e.img ? ' pic' : '')}, e.img ? '' : (e.ab || (e.name||'?').slice(0,1).toUpperCase())); if (e.img) av.style.backgroundImage = 'url("'+e.img.replace(/"/g,'')+'")';
+        const nm = h('b',{}, e.name), ct = h('span',{}), rk = h('span',{class:'rank'});
+        const runner = h('div',{class:'runner'}, rk, av, h('div',{class:'tag'}, nm, ct));
+        L = {lane:h('div',{class:'lane'}, runner), runner, ct, rk}; lanes.set(e.name, L);
+      }
+      track.append(L.lane);   // keeps lanes in standing order
+      L.rk.textContent = String(i+1); L.ct.textContent = R.kind==='products' ? fmtN(e.n)+' sold' : fmtN(e.n)+' order'+(e.n===1 ? '' : 's');
+      L.runner.classList.toggle('lead', i===0 && e.n>0);
+      const pos = Math.min(0.86, e.n/scale);
+      L.runner.style.left = 'calc(2vw + '+(pos*100).toFixed(2)+'% - '+(pos*22).toFixed(2)+'vw)';
+    });
+    for (const [k,L] of lanes) if (!seen.has(k)){ L.lane.remove(); lanes.delete(k); }
+    const leader = list[0] && list[0].n>0 ? list[0].name : '';
+    const was = R.leader; R.leader = leader;
+    return {leader, was, list};
+  }
+  function finish(){
+    const list = standings(); const w = list[0];
+    if (!w || !w.n){ begin(false); return; }
+    const L = lanes.get(w.name); if (L) L.runner.style.left = 'calc(100% - 22vw)';
+    R.over = h('div',{class:'winner'}, h('div',{class:'w'}, h('div',{class:'av'+(w.img ? ' pic' : ''),style:w.img ? 'background-image:url("'+w.img.replace(/"/g,'')+'")' : ''}, w.img ? '' : (w.ab || w.name.slice(0,1))),
+      h('h2',{}, '🏆 '+w.name+' wins!'), h('p',{}, fmtN(w.n)+(R.kind==='products' ? ' sold' : ' orders')+(list[1] && list[1].n ? ' · '+list[1].name+' second with '+fmtN(list[1].n) : '')+' · '+money(round2(w.rev)))));
+    el.append(R.over);
+    talk.say(pick(['And at the line… it’s '+w.name+'! '+w.n+' orders this race!', w.name+' wins it! What a race! '+w.n+' orders!', 'Photo finish… and the winner is '+w.name+'!']), 3);
+    setTimeout(()=>begin(true), 9000);
+  }
+  function tick(){
+    const left = R.end - Date.now();
+    clockEl.replaceChildren(document.createTextNode(R.end===Infinity ? '🔴' : Math.max(0, Math.floor(left/60000))+':'+String(Math.max(0, Math.floor(left/1000)%60)).padStart(2,'0')), h('small',{}, R.end===Infinity ? 'LIVE race' : 'left in the race'));
+    if (!R.over && left <= 0) finish();
+  }
+  // New orders: move the racers and give the commentator something to say.
+  function onOrders(nf){
+    if (R.over) return;
+    const r = paint();
+    for (const o of nf){ if (R.kind==='products') for (const l of o.items) R.lastNames.push(l.name); else { const st = stateOf(o); if (st) R.lastNames.push(st.name); } }
+    R.lastNames = R.lastNames.slice(-8);
+    if (r.leader && r.was && r.leader!==r.was) talk.say(pick([r.leader+' takes the lead!', 'Oh! '+r.leader+' storms past '+r.was+'!', 'We have a new leader… '+r.leader+'!']), 2);
+    else if (r.leader && !r.was) talk.say(pick([r.leader+' jumps out in front!', 'First blood to '+r.leader+'!']), 1);
+    else { const k = R.lastNames.length >= 4 && R.lastNames.slice(-4).every(n=>n===R.lastNames[R.lastNames.length-1]) ? R.lastNames[R.lastNames.length-1] : '';
+      if (k) talk.say(pick([k+', four in a row! Unstoppable!', 'Nobody can stop '+k+' right now!', k+' is on fire!']), 1); }
+  }
+  begin(false);
+  const timer = setInterval(tick, 1000); tick();
+  return {el, onOrders, paint, stop(){ clearInterval(timer); }};
+}
+
+// The commentator: the Mac's own voice (speech synthesis, free) calls the action. One line at a time; a more
+// important line can cut in, small talk waits its turn or is skipped.
+const pick = a => a[Math.floor(Math.random()*a.length)];
+function tvTalk(T, root){
+  const C = {on:true, busy:false, lastAt:0, prio:0, voice:null};
+  try { C.on = localStorage.getItem('ss_tvtalk')!=='0'; } catch(e){}
+  const synth = window.speechSynthesis;
+  const pickVoice = ()=>{ if (!synth) return; const vs = synth.getVoices().filter(v=>/^en/i.test(v.lang));
+    C.voice = ['Daniel','Alex','Aaron','Fred','Google UK English Male','Samantha'].map(n=>vs.find(v=>v.name.startsWith(n))).find(Boolean) || vs[0] || null; };
+  if (synth){ pickVoice(); synth.addEventListener && synth.addEventListener('voiceschanged', pickVoice); }
+  let bubble = null;
+  function show(text){ bubble && bubble.remove(); bubble = h('div',{class:'say'}, '🎙️ '+text); root.append(bubble); const b = bubble; setTimeout(()=>{ if (b===bubble){ b.remove(); bubble = null; } }, 4500); }
+  function say(text, prio){
+    prio = prio || 0;
+    if (!C.on) return;
+    if (C.busy && prio <= C.prio) return;
+    if (!C.busy && prio===0 && Date.now()-C.lastAt < 9000) return;   // keep small talk from piling up
+    show(text);
+    if (!synth) return;
+    try {
+      if (C.busy) synth.cancel();
+      const u = new SpeechSynthesisUtterance(text); if (C.voice) u.voice = C.voice;
+      u.rate = 1.08; u.pitch = 1; u.volume = Math.min(1, Math.max(0.1, T.vol==null ? 1 : T.vol));
+      u.onend = u.onerror = ()=>{ C.busy = false; C.lastAt = Date.now(); };
+      C.busy = true; C.prio = prio; synth.speak(u);
+    } catch(e){ C.busy = false; }
+  }
+  // Lines for each batch of new orders; called after the order sound.
+  const stepK = 5000;
+  function onOrders(nf, todayGmv, prevGmv, perMin){
+    const big = nf.find(o=>o.gmv >= 100);
+    if (Math.floor(todayGmv/stepK) > Math.floor(prevGmv/stepK) && prevGmv>0) return say(pick(['We just passed '+shortMoney(Math.floor(todayGmv/stepK)*stepK)+' today!', 'Another milestone… '+shortMoney(Math.floor(todayGmv/stepK)*stepK)+' on the board today!']), 2);
+    if (big) return say(pick(['Big spender'+(big.state ? ' in '+big.state : '')+'! '+money(round2(big.gmv))+'!', 'Whoa! A '+money(round2(big.gmv))+' order'+(big.state ? ' from '+big.state : '')+'!']), 1);
+    if (perMin >= 10) return say(pick(['That’s '+perMin+' orders in the last minute! They’re flying!', perMin+' orders a minute! The warehouse is on fire!']), 1);
+    const o = nf[nf.length-1], name = o.items[0] ? o.items[0].name : 'another one';
+    say(pick([o.state ? 'Another one from '+o.state+'!' : 'Another order in!', name+' keeps rolling!', o.city && o.state ? 'Order from '+o.city+', '+o.state+'!' : name+' again!', 'Ka-ching! '+name+'!']), 0);
+  }
+  return {say, onOrders, get on(){ return C.on; }, set on(v){ C.on = v; try { localStorage.setItem('ss_tvtalk', v ? '1' : '0'); } catch(e){} if (!v && synth) synth.cancel(); }, stop(){ if (synth) synth.cancel(); }};
+}
+
 function openTV(){
   if ($('#tv')) return;
   const T = {orders:new Map(), loaded:false, stream:null, sound:true, audio:null, timers:[], last:0, day:ptNow().start, err:'', goal:null, wake:null};
@@ -5094,17 +5283,19 @@ function openTV(){
   const clock = h('span',{class:'clock'});
   const soundBtn = h('button',{type:'button'}, T.sound ? 'Sound on' : 'Sound off');
   T.vol = (()=>{ try { const v = parseFloat(localStorage.getItem('ss_tvvol')); return isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; } catch(e){ return 1; } })();
-  const volIn = h('input',{type:'range',min:'0',max:'1',step:'0.05',value:String(T.vol),'aria-label':'Order sound volume',style:'width:9vw;accent-color:#e5192b'});
+  const volIn = h('input',{type:'range',min:'0',max:'1',step:'0.05',value:String(T.vol),'aria-label':'Order sound volume',style:'width:6vw;accent-color:#e5192b'});
   volIn.addEventListener('input', ()=>{ T.vol = +volIn.value; try { localStorage.setItem('ss_tvvol', String(T.vol)); } catch(e){} });
   volIn.addEventListener('change', ()=>chime());
   T.soundKind = (()=>{ try { const k = localStorage.getItem('ss_tvsoundkind'); return TV_SOUNDS.some(x=>x[0]===k) ? k : 'craps'; } catch(e){ return 'craps'; } })();
-  const kindSel = h('select',{'aria-label':'Order sound',style:'background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.7vh .6vw;font:inherit;font-size:1.6vh'},
+  const kindSel = h('select',{'aria-label':'Order sound',style:'background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.7vh .6vw;font:inherit;font-size:1.5vh;max-width:12vw'},
     TV_SOUNDS.map(([k,l])=>{ const o = h('option',{value:k},l); if (k===T.soundKind) o.selected = true; return o; }));
   kindSel.addEventListener('change', ()=>{ T.soundKind = kindSel.value; try { localStorage.setItem('ss_tvsoundkind', T.soundKind); } catch(e){} const was = T.sound; T.sound = true; chime(); T.sound = was; });
   const testBtn = h('button',{type:'button',onclick:()=>{ const was = T.sound; T.sound = true; chime(true); T.sound = was; }},'Test sound');
   const liveBtn = h('button',{type:'button'}, 'Show our live');
   const exitBtn = h('button',{type:'button'}, 'Exit TV');
-  const mapBtn = h('button',{type:'button'}, 'Map view');
+  const viewBtns = [['dash','Dashboard'],['map','Map'],['race','Race']].map(([k,l])=>h('button',{type:'button','aria-pressed':'false',onclick:()=>setView(k)}, l));
+  const views = h('div',{class:'views',role:'group','aria-label':'Screen'}, ...viewBtns);
+  const talkBtn = h('button',{type:'button'}, 'Commentator on');
   const video = h('video',{autoplay:true, muted:true, playsinline:true, hidden:true});
   const ph = h('div',{class:'ph'},
     h('h2',{style:"font-family:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;font-size:4vh;margin:0"},'Show your TikTok LIVE here'),
@@ -5120,9 +5311,9 @@ function openTV(){
   const feed = h('div',{class:'feed'});
   const feedCard = h('div',{class:'card',style:'display:flex;flex-direction:column;min-height:0'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Latest orders'), feed);
   const tickInner = h('div',{}); const tick = h('div',{class:'tick'}, tickInner);
-  let tvmain = null, sideCol = null, map = null;
+  let tvmain = null, sideCol = null, map = null, race = null, talk = null;
   const root = h('div',{id:'tv',role:'dialog','aria-label':'TV dashboard'},
-    h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl',style:'align-items:center'}, liveBtn, soundBtn, kindSel, volIn, testBtn, mapBtn, exitBtn), clock),
+    h('div',{class:'tvtop'}, h('img',{src:window.STOCKROOM ? STOCKROOM.logo() : LOGO,alt:''}), h('h2',{}, BRAND()), onair, h('div',{class:'tvctl',style:'align-items:center'}, liveBtn, soundBtn, kindSel, volIn, testBtn, talkBtn, views, exitBtn), clock),
     tvmain = h('div',{class:'tvmain'}, liveBox, sideCol = h('div',{class:'side'}, todayCard, goalCard, topCard), feedCard),
     tick);
   document.body.append(root); document.body.classList.add('locked');
@@ -5141,26 +5332,34 @@ function openTV(){
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser', frameRate:30}, audio:false, selfBrowserSurface:'exclude'});
       if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
-      T.stream = s; video.srcObject = s; video.hidden = false; ph.hidden = true; onair.classList.add('on'); liveBtn.textContent = 'Change live tab';
+      T.stream = s; video.srcObject = s; video.hidden = false; ph.hidden = true; onair.classList.add('on'); liveBtn.textContent = 'Change live';
       s.getVideoTracks()[0].addEventListener('ended', ()=>{ video.hidden = true; ph.hidden = false; onair.classList.remove('on'); liveBtn.textContent = 'Show our live'; T.stream = null; });
       video.play().catch(()=>{});
     } catch(e){ if (e && e.name!=='NotAllowedError' && e.name!=='AbortError') pop('Could not show the live: '+e.message); }
   }
   liveBtn.onclick = shareLive;
   soundBtn.onclick = ()=>{ T.sound = !T.sound; soundBtn.textContent = T.sound ? 'Sound on' : 'Sound off'; try { localStorage.setItem('ss_tvsound', T.sound ? '1' : '0'); } catch(e){} if (T.sound) chime(); };
-  // Map view: the order globe takes the screen; the order list moves beside it.
-  mapBtn.onclick = ()=>{
-    const on = mapBtn.textContent==='Map view';
-    mapBtn.textContent = on ? 'Dashboard' : 'Map view';
-    liveBox.hidden = sideCol.hidden = on;
-    if (on){
-      if (!map){ window.claude.use('tiktok').then(tt=>{ map = tvMap(tt, T); tvmain.append(map.el); map.el.querySelector('.fslot').append(feedCard); map.start(); }); }
-      else { map.el.hidden = false; map.el.querySelector('.fslot').append(feedCard); setTimeout(()=>map.resize(), 50); }
-    } else if (map){ map.el.hidden = true; tvmain.append(feedCard); }
-    try { localStorage.setItem('ss_tvview', on ? 'map' : 'dash'); } catch(e){}
-  };
+  // Views: Dashboard (live + sales), Map (the order globe, with the order list beside it) and Race.
+  talk = tvTalk(T, root);
+  talkBtn.textContent = talk.on ? 'Commentator on' : 'Commentator off';
+  talkBtn.onclick = ()=>{ talk.on = !talk.on; talkBtn.textContent = talk.on ? 'Commentator on' : 'Commentator off'; if (talk.on) talk.say('Commentator here! Let’s see some orders!', 3); };
+  let view = 'dash';
+  function setView(v){
+    view = v;
+    viewBtns.forEach((b,i)=>b.setAttribute('aria-pressed', String(['dash','map','race'][i]===v)));
+    liveBox.hidden = sideCol.hidden = v!=='dash';
+    feedCard.hidden = v==='race';
+    if (map) map.el.hidden = v!=='map';
+    if (race) race.el.hidden = v!=='race';
+    if (v==='map'){
+      if (!map){ window.claude.use('tiktok').then(tt=>{ map = tvMap(tt, T); tvmain.append(map.el); map.el.hidden = view!=='map'; map.el.querySelector('.fslot').append(feedCard); map.start(); }); }
+      else { map.el.querySelector('.fslot').append(feedCard); setTimeout(()=>map.resize(), 50); }
+    } else tvmain.append(feedCard);
+    if (v==='race'){ if (!race){ race = tvRace(T, talk); tvmain.append(race.el); loadScript('js/geo-us.js').then(()=>race.paint()).catch(()=>{}); } race.paint(); }
+    try { localStorage.setItem('ss_tvview', v); } catch(e){}
+  }
   function close(){
-    if (map) map.stop();
+    if (map) map.stop(); if (race) race.stop(); if (talk) talk.stop();
     T.timers.forEach(clearInterval); if (T.stream) T.stream.getTracks().forEach(t=>t.stop());
     try { if (T.audio) T.audio.close(); } catch(e){} try { if (T.wake) T.wake.release(); } catch(e){}
     try { if (document.fullscreenElement) document.exitFullscreen().catch(()=>{}); } catch(e){}
@@ -5235,6 +5434,10 @@ function openTV(){
         if (nf.length){
           const total = round2(nf.reduce((a,o)=>a+o.gmv,0));
           chime(total>=100);
+          const live = [...T.orders.values()].filter(counts), gmvNow = round2(live.reduce((a,o)=>a+o.gmv,0));
+          const perMin = live.filter(o=>Date.now() - o.t*1000 < 60000).length;
+          if (race) race.onOrders(nf);
+          setTimeout(()=>talk && talk.onOrders(nf, gmvNow, round2(gmvNow - total), perMin), 1300);
           pop(nf.length===1 ? 'New order · '+(nf[0].items[0] ? nf[0].items[0].name : 'TikTok')+' · '+money(round2(nf[0].gmv)) : nf.length+' new orders · '+money(total));
         }
         T.loaded = true; draw(new Set(nf.map(o=>o.id)));
@@ -5244,7 +5447,8 @@ function openTV(){
     T.timers.push(setInterval(()=>{ if (!document.hidden || T.stream) tickOrders(); }, pollMs));
   }).catch(()=>{ T.loaded = true; draw(); });
   draw();
-  try { if (localStorage.getItem('ss_tvview')==='map') setTimeout(()=>mapBtn.click(), 0); } catch(e){}
+  setView('dash');
+  try { const v = localStorage.getItem('ss_tvview'); if (v==='map' || v==='race') setTimeout(()=>setView(v), 0); } catch(e){}
 }
 
 /* ---------- start ---------- */

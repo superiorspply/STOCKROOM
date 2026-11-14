@@ -383,6 +383,29 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
   .labelwrap,.labelwrap *{visibility:visible}
   .labelwrap{position:absolute;left:0;top:0;width:100%;border:0}
 }
+/* Operator chat */
+.opwrap{display:flex;flex-direction:column;gap:10px}
+.oplog{display:flex;flex-direction:column;gap:8px;min-height:120px;max-height:56vh;overflow:auto;padding:2px}
+.opmsg{max-width:88%;padding:9px 13px;border-radius:16px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.opmsg.me{align-self:flex-end;background:var(--accent-soft);border-bottom-right-radius:6px}
+.opmsg.ai{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:6px}
+.opmsg.note{align-self:center;background:none;color:var(--muted);font-size:12.5px;padding:0}
+.opcard{align-self:stretch;border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface)}
+.opcard h4{margin:0 0 6px;font-size:14.5px}
+.opcard .ln{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:3px 0}
+.opcard .ln b{white-space:nowrap}
+.opcard .foot{margin-top:10px}
+.opcard.done{opacity:.75}
+.opin{display:flex;gap:8px;align-items:flex-end}
+.opin textarea{flex:1;min-height:46px;max-height:140px}
+.opmic{width:46px;height:46px;border-radius:50%;flex:none;display:grid;place-items:center;padding:0}
+.opmic.on{background:var(--accent);border-color:var(--accent);color:#fff;animation:oppulse 1.2s ease-in-out infinite}
+@keyframes oppulse{50%{box-shadow:0 0 0 6px rgba(229,25,43,.25)}}
+.optry{display:flex;flex-wrap:wrap;gap:6px}.optry[hidden]{display:none}
+.optry .chip{white-space:normal;text-align:left}
+.opdots::after{content:'…';animation:opdots 1.2s steps(4) infinite}
+@keyframes opdots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+@media (prefers-reduced-motion:reduce){.opmic.on,.opdots::after{animation:none}}
 /* TV dashboard: full screen, made for a TV across the room */
 #tv{position:fixed;inset:0;z-index:80;background:#050506;color:#f6f6f8;display:grid;grid-template-rows:auto 1fr auto;gap:1.2vh;padding:2vh 2vw;font-family:'IBM Plex Sans',system-ui,sans-serif;overflow:hidden}
 #tv .tvtop{display:flex;align-items:center;gap:1.2vw}
@@ -439,6 +462,7 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
   <div class="brand"><span class="mark"><img class="logo" alt="" width="40" height="40"></span><h1><span class="b1">Stockroom</span><span class="b2">x Stockroom</span></h1></div>
   <span class="status" id="status"><i></i><span>Connecting…</span></span>
   <button class="linkbtn" id="clockBtn">Clock</button>
+  <button class="linkbtn" id="opBtn" hidden>Operator</button>
   <button class="linkbtn" id="askBtn" hidden>Ask</button>
   <button class="linkbtn" id="liveBtn" hidden>Live</button>
   <button class="linkbtn" id="tvBtn" hidden>TV</button>
@@ -4193,6 +4217,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
 $('#exportBtn').addEventListener('click', openExport);
 $('#tvBtn').addEventListener('click', ()=>openTV());
 $('#askBtn').addEventListener('click', ()=>openAsk());
+$('#opBtn').addEventListener('click', ()=>openOperator());
 $('#clockBtn').addEventListener('click', openClock);
 $('#liveBtn').addEventListener('click', openLive);
 
@@ -4503,6 +4528,308 @@ function openLive(){
   const old = L.refresh; L.refresh = ()=>{ drawCtl(); old(); };
 }
 
+/* ---------- Stockroom Operator ---------- */
+// An AI assistant: the server function passes the conversation to Claude one turn at a time; the tools run
+// here, on the data this person can already see, and every change is shown as a card to Confirm or Cancel
+// before it is written. Costs and profit are left out for people who are not owners or admins.
+const OP = {messages:[], busy:false};
+const opDay = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); return m ? new Date(+m[1], +m[2]-1, +m[3]).getTime() : NaN; };
+const opRange = (from, to) => { const a = opDay(from), b = opDay(to); return {from:isFinite(a) ? a : -Infinity, to:isFinite(b) ? b + DAY : Infinity}; };
+const opLow = v => String(v||'').trim().toLowerCase();
+function opMatch(list, q, keys){
+  const t = opLow(q); if (!t) return [];
+  const exact = list.filter(x=>keys.some(k=>opLow(x[k])===t)); if (exact.length) return exact;
+  return list.filter(x=>keys.some(k=>opLow(x[k]).includes(t)));
+}
+function opItem(it){
+  const r = {id:it.id, sku:it.sku, name:it.name, category:it.category||'', qty:it.qty||0, price:it.price||0};
+  if (isSet(it.priceMedium)) r.price_medium = it.priceMedium; if (isSet(it.priceLarge)) r.price_large = it.priceLarge;
+  if (isSized(it)) r.sizes = sizeMapOf(it);
+  if (state.isAdmin) r.cost = it.cost||0;
+  return r;
+}
+function opFindItem(a){
+  if (a.item_id){ const it = state.items.find(i=>i.id===a.item_id); if (it) return {it}; }
+  const m = opMatch(state.items, a.item || a.item_id, ['sku','name']);
+  if (m.length===1) return {it:m[0]};
+  return {err: m.length ? 'More than one item matches "'+(a.item||a.item_id)+'": '+m.slice(0,8).map(i=>i.sku+' '+i.name).join('; ') : 'No item matches "'+(a.item||a.item_id||'')+'".'};
+}
+function opFindCustomer(a){
+  if (a.customer_id){ const c = state.customers.find(x=>x.id===a.customer_id); if (c) return {c}; }
+  const m = opMatch(state.customers, a.customer_name || a.customer_id, ['name','handle','phone','email']);
+  if (m.length===1) return {c:m[0]};
+  return {err: m.length ? 'More than one customer matches "'+(a.customer_name||'')+'": '+m.slice(0,8).map(c=>c.name+(c.handle ? ' '+c.handle : '')).join('; ') : 'No customer matches "'+(a.customer_name||a.customer_id||'')+'".'};
+}
+const opInvKey = no => { const t = String(no||'').trim().toUpperCase(); const k = allInvoices().find(v=>v.no.toUpperCase()===t || v.key.toUpperCase()===t || v.no.toUpperCase()==='INV-'+t.replace(/^INV-?/,'').padStart(4,'0')); return k ? k.key : ''; };
+function opMethod(m){
+  const t = opLow(m).replace(/[^a-z]/g,'');
+  const alias = {card:'Credit card / Square', creditcard:'Credit card / Square', square:'Credit card / Square', debit:'Credit card / Square', cashapp:'Cash App', applepay:'Apple Pay', paypal:'PayPal', zelle:'Zelle', cash:'Cash', wire:'Wire', check:'Check', cheque:'Check'};
+  return PAY_METHODS.find(x=>opLow(x).replace(/[^a-z]/g,'')===t) || alias[t] || '';
+}
+
+// Read tools: run straight away.
+const OP_READ = {
+  find_items(a){
+    let list = state.items;
+    if (a.low_stock_only) list = list.filter(i=>(i.qty||0)<=5);
+    if (a.query) { const t = opLow(a.query); list = list.filter(i=>[i.sku,i.name,i.category].some(v=>opLow(v).includes(t))); }
+    const n = Math.min(100, a.limit || 40);
+    return {count:list.length, items:list.slice().sort((x,y)=>String(x.name).localeCompare(String(y.name))).slice(0,n).map(opItem)};
+  },
+  find_customers(a){
+    let list = state.customers;
+    if (a.query){ const t = opLow(a.query); list = list.filter(c=>[c.name,c.handle,c.phone,c.email].some(v=>opLow(v).includes(t))); }
+    const inv = allInvoices(); const n = Math.min(100, a.limit || 30);
+    return {count:list.length, customers:list.slice(0,n).map(c=>({id:c.id, name:c.name, handle:c.handle||'', phone:c.phone||'', email:c.email||'',
+      spent:round2(spentBy(c.id)), owed:round2(inv.filter(v=>v.customerId===c.id && !v.paid).reduce((x,v)=>x+v.balance,0)), last_order:lastOrder(c.id) ? localDay(lastOrder(c.id)) : ''}))};
+  },
+  list_invoices(a){
+    const r = opRange(a.from, a.to);
+    let list = allInvoices().filter(v=>{ const t = Date.parse(v.at); return t>=r.from && t<r.to; });
+    if (a.customer_id) list = list.filter(v=>v.customerId===a.customer_id);
+    if (a.status==='unpaid') list = list.filter(v=>!v.paid); else if (a.status==='paid') list = list.filter(v=>v.paid);
+    const n = Math.min(100, a.limit || 30);
+    return {count:list.length, total_owed:round2(list.filter(v=>!v.paid).reduce((x,v)=>x+v.balance,0)),
+      invoices:list.slice(0,n).map(v=>({invoice_no:v.no, date:localDay(v.at), customer:v.customerName||'', customer_id:v.customerId||'', total:v.total, paid:v.paidAmt, balance:v.balance, status:v.status, shipping_status:v.ship}))};
+  },
+  get_invoice(a){
+    const key = opInvKey(a.invoice_no); if (!key) return {error:'No invoice '+a.invoice_no+'.'};
+    const d = baseInvoice(key);
+    return {invoice_no:d.no, date:localDay(d.date), customer:d.name, customer_id:invoiceSales(key)[0]?.customerId||'', lines:d.lines.map(s=>({item:lineName(s), sku:s.sku, qty:s.qty, unit_price:s.unitPrice, total:s.total})),
+      subtotal:d.subtotal, shipping:d.shipping, total:d.total, paid:d.paidAmt, balance:d.balance, status:d.status, payments:d.payments.map(p=>({method:p.method, amount:num(p.amount), date:localDay(p.at)})),
+      shipping_status:shipOf(key), tracking:d.track||'', note:d.note||''};
+  },
+  sales_report(a){
+    const r = opRange(a.from, a.to), sales = state.sales.filter(s=>{ const t = Date.parse(s.at); return t>=r.from && t<r.to; });
+    const out = {from:a.from, to:a.to, revenue:round2(sales.reduce((x,s)=>x+(s.total||0),0)), units:sales.reduce((x,s)=>x+(s.qty||0),0), invoices:new Set(sales.map(invKey)).size};
+    if (state.isAdmin) out.profit = round2(sales.reduce((x,s)=>x+(s.total||0)-(s.qty||0)*(s.unitCost||0),0));
+    const by = a.group_by || 'item', g = new Map();
+    for (const s of sales){ const k = by==='customer' ? (s.customerName||'Walk-in') : by==='day' ? localDay(s.at) : lineName(s);
+      const e = g.get(k) || {name:k, revenue:0, units:0, profit:0}; e.revenue += s.total||0; e.units += s.qty||0; e.profit += (s.total||0)-(s.qty||0)*(s.unitCost||0); g.set(k, e); }
+    out['by_'+by] = [...g.values()].sort((x,y)=>by==='day' ? x.name.localeCompare(y.name) : y.revenue-x.revenue).slice(0,40)
+      .map(e=>Object.assign({name:e.name, revenue:round2(e.revenue), units:e.units}, state.isAdmin ? {profit:round2(e.profit)} : {}));
+    return out;
+  },
+  async tiktok_sales(a){
+    if (!state.isAdmin || !state.tiktokOn) return {error:'TikTok Shop numbers are only available to owners and admins of a company with TikTok Shop connected.'};
+    const fa = /^\d{4}-\d{2}-\d{2}$/.test(a.from||'') ? utcOf(a.from) : null, fb = /^\d{4}-\d{2}-\d{2}$/.test(a.to||'') ? utcOf(a.to)+DAY : null;
+    const days = await (await window.claude.use('tiktok')).dailySales(fa, fb);
+    return {from:a.from, to:a.to, net_sales:round2(days.reduce((x,d)=>x+num(d.sales),0)), by_day:days.map(d=>({day:String(d.day).slice(0,10), net_sales:round2(num(d.sales))})),
+      note:'TikTok net sales on the day TikTok settled them (UTC); the last few days fill in later.'};
+  }
+};
+
+// Write tools: plan() checks the request and describes it; run() writes it once the person confirms.
+const OP_WRITE = {
+  create_invoice:{
+    plan(a){
+      let cust = null, newName = '';
+      if (a.new_customer_name && !a.customer_id) newName = String(a.new_customer_name).trim();
+      else if (a.customer_id || a.customer_name){ const f = opFindCustomer(a); if (f.err) return {error:f.err}; cust = f.c; }
+      else return {error:'Say who the invoice is for.'};
+      if (!Array.isArray(a.lines) || !a.lines.length) return {error:'An invoice needs at least one line.'};
+      const lines = [], need = new Map();
+      for (const l of a.lines){
+        const q = int(l.qty); if (q<1) return {error:'Each line needs a quantity of at least 1.'};
+        if (l.custom_name){ if (!isFinite(+l.unit_price) || +l.unit_price<0) return {error:'Give a price for "'+l.custom_name+'".'}; lines.push({custom:true, name:String(l.custom_name).trim(), qty:q, price:round4(+l.unit_price)}); continue; }
+        const f = opFindItem(l); if (f.err) return {error:f.err};
+        const it = f.it; let size = '';
+        if (isSized(it)){ const m = sizeMapOf(it); size = l.size ? String(l.size) : (Object.keys(m).length===1 ? Object.keys(m)[0] : ''); if (!size) return {error:it.sku+' has sizes ('+Object.keys(m).join(', ')+'). Say which size.'}; if ((m[size]||0) < q) return {error:'Only '+(m[size]||0)+' of '+it.sku+' left in size '+size+'.'}; }
+        need.set(it.id, (need.get(it.id)||0)+q);
+        lines.push({it, name:it.name, sku:it.sku, size, qty:q, price:round4(l.unit_price!=null && isFinite(+l.unit_price) ? +l.unit_price : priceFor(it, q))});
+      }
+      for (const [id,q] of need){ const it = state.items.find(i=>i.id===id); if (q>(it.qty||0)) return {error:'Only '+(it.qty||0)+' of '+it.sku+' in stock.'}; }
+      const sub = round2(lines.reduce((x,l)=>x+round2(l.qty*l.price),0)), ship = round2(Math.max(0, num(a.shipping)));
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(a.date||'') ? a.date : localDay(nowIso());
+      return {cust, newName, lines, ship, day, note:String(a.note||'').trim(), sub, total:round2(sub+ship),
+        title:'New invoice for '+(cust ? cust.name : newName+' (new customer)'),
+        rows:lines.map(l=>[(l.qty)+' × '+l.name+(l.size && l.size!=='Unsized' ? ' ('+l.size+')' : '')+' @ '+money(l.price), money(round2(l.qty*l.price))])
+          .concat(ship>0 ? [['Shipping', money(ship)]] : []).concat([['Total', money(round2(sub+ship))]]).concat(day!==localDay(nowIso()) ? [['Dated', fmtDate(atForDay(day))]] : []).concat(a.note ? [['Note', String(a.note)]] : []),
+        confirm:'Create invoice'};
+    },
+    async run(p){
+      let invNo = '';
+      const ok = await write(async()=>{
+        let customerId = p.cust ? p.cust.id : '', customerName = p.cust ? p.cust.name : p.newName;
+        if (!p.cust){ const ref = state.db.collection('customers').doc(); await ref.set({name:p.newName, type:'', handle:'', phone:'', email:'', addresses:[], address:'', notes:'', createdAt:nowIso()}); customerId = ref.id; }
+        invNo = nextInvoiceNo(); const at = atForDay(p.day); const lefts = new Map(), maps = new Map();
+        for (const l of p.lines){
+          if (l.custom){ await state.db.collection('sales').doc().set({itemId:'', sku:'CUSTOM', name:l.name, qty:l.qty, size:'', sizeType:'', unitPrice:l.price, unitCost:0, total:round2(l.qty*l.price), customerId, customerName, invoiceNo:invNo, note:'', custom:true, at}); continue; }
+          const cur = state.items.find(i=>i.id===l.it.id); const sn = isSized(cur);
+          await state.db.collection('sales').doc().set({itemId:cur.id, sku:cur.sku, name:cur.name, qty:l.qty, size:(sn && l.size!=='Unsized') ? l.size : '', sizeType:(sn && l.size!=='Unsized') ? (cur.sizeType||'') : '', unitPrice:l.price, unitCost:cur.cost||0, total:round2(l.qty*l.price), customerId, customerName, invoiceNo:invNo, note:'', at});
+          if (!lefts.has(cur.id)) lefts.set(cur.id, cur.qty||0); lefts.set(cur.id, lefts.get(cur.id)-l.qty);
+          if (sn){ if (!maps.has(cur.id)) maps.set(cur.id, Object.assign({}, sizeMapOf(cur))); const m = maps.get(cur.id); m[l.size] = (m[l.size]||0)-l.qty; if (m[l.size]<=0) delete m[l.size]; }
+        }
+        for (const [id,left] of lefts){ const cur = state.items.find(i=>i.id===id); const upd = {qty:left, queued:left>0 ? !!cur.queued : false, updatedAt:nowIso()}; if (maps.has(id)) upd.sizes = maps.get(id); await state.db.doc('items/'+id).update(upd); }
+        if (p.ship>0 || p.note) await saveInvoiceMeta(invNo, {shipping:p.ship, note:p.note});
+      });
+      return ok ? {done:true, invoice_no:invNo, total:p.total, open:invNo} : {done:false, error:'Could not save the invoice.'};
+    }
+  },
+  record_payment:{
+    plan(a){
+      const key = opInvKey(a.invoice_no); if (!key) return {error:'No invoice '+a.invoice_no+'.'};
+      const d = baseInvoice(key), amt = round2(num(a.amount)), method = opMethod(a.method);
+      if (!(amt>0)) return {error:'Give the amount paid.'};
+      if (!method) return {error:'Payment method must be one of: '+PAY_METHODS.join(', ')+'.'};
+      if (amt > d.balance+0.005) return {error:d.no+' only has '+money(d.balance)+' left to pay.'};
+      const left = round2(d.balance-amt);
+      return {key, no:d.no, amt, method, note:String(a.note||'').trim(), title:'Payment on '+d.no+' · '+d.name,
+        rows:[[method, money(amt)], ['Invoice total', money(d.total)], [left<=0.004 ? 'Paid in full' : 'Still due after this', money(left)]].concat(a.note ? [['Note', String(a.note)]] : []), confirm:'Record payment'};
+    },
+    async run(p){
+      const d = baseInvoice(p.key), now = nowIso();
+      const pays = paymentsOf(p.key).concat([{method:p.method, amount:p.amt, at:now, note:p.note}]);
+      const done = round2(d.paidAmt + p.amt) >= d.total-0.005;
+      const ok = await write(()=>saveInvoiceMeta(p.key, {payments:pays, paid:done, paidAt:done ? now : null}));
+      return ok ? {done:true, invoice_no:p.no, paid_in_full:done, balance:round2(Math.max(0, d.balance-p.amt)), open:p.key} : {done:false, error:'Could not save the payment.'};
+    }
+  },
+  add_customer:{
+    plan(a){
+      const name = String(a.name||'').trim(); if (!name) return {error:'Give the customer’s name.'};
+      const dup = state.customers.find(c=>opLow(c.name)===opLow(name));
+      const d = {name, handle:String(a.handle||'').trim(), phone:String(a.phone||'').trim(), email:String(a.email||'').trim(), notes:String(a.notes||'').trim()};
+      return {d, title:'New customer: '+name, rows:[['Handle', d.handle], ['Phone', d.phone], ['Email', d.email], ['Notes', d.notes]].filter(r=>r[1]).concat(dup ? [['Heads up', 'You already have a customer named '+dup.name]] : []), confirm:'Add customer'};
+    },
+    async run(p){
+      const ref = state.db.collection('customers').doc();
+      const ok = await write(()=>ref.set(Object.assign({type:'', addresses:[], address:'', createdAt:nowIso(), updatedAt:nowIso()}, p.d)));
+      return ok ? {done:true, customer_id:ref.id, name:p.d.name} : {done:false, error:'Could not save the customer.'};
+    }
+  },
+  update_stock:{
+    plan(a){
+      const f = opFindItem(a); if (f.err) return {error:f.err};
+      const it = f.it; if (isSized(it)) return {error:it.sku+' has sizes. Change its stock in the item itself.'};
+      const cur = it.qty||0, next = a.set_qty!=null ? int(a.set_qty) : cur + int(a.change);
+      if (a.set_qty==null && a.change==null) return {error:'Say the new count or how much to add or take away.'};
+      if (next<0) return {error:'That would leave '+next+' of '+it.sku+'.'};
+      return {it, next, title:'Stock for '+it.sku+' '+it.name, rows:[['Now', fmtN(cur)], ['After', fmtN(next)]].concat(a.note ? [['Note', String(a.note)]] : []), confirm:'Update stock'};
+    },
+    async run(p){
+      const ok = await write(()=>state.db.doc('items/'+p.it.id).update({qty:p.next, queued:p.next>0 ? !!p.it.queued : false, updatedAt:nowIso()}));
+      return ok ? {done:true, sku:p.it.sku, qty:p.next} : {done:false, error:'Could not save the stock.'};
+    }
+  }
+};
+
+function openOperator(){
+  const log = h('div',{class:'oplog','aria-live':'polite'});
+  const input = h('textarea',{placeholder:'Ask or tell the Operator…',rows:'2','aria-label':'Message to the Operator'});
+  const sendBtn = h('button',{class:'btn primary',type:'button'},'Send');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic = SR ? h('button',{class:'btn opmic',type:'button','aria-label':'Speak','aria-pressed':'false'}, '🎤') : null;
+  const tries = ['Who owes us money?','What sold best this week?','What is running low?','Invoice Dom for 10 squishy butters'];
+  const tryBox = h('div',{class:'optry'}, tries.map(t=>h('button',{class:'chip',type:'button',onclick:()=>{ input.value = t; go(); }}, t)));
+  const newBtn = h('button',{class:'linkbtn',type:'button',onclick:()=>{ if (OP.busy) return; OP.messages = []; redraw(); }},'New chat');
+  const scroll = ()=>{ log.scrollTop = log.scrollHeight; };
+  const say = (cls, text)=>{ const m = h('div',{class:'opmsg '+cls}, text); log.append(m); scroll(); return m; };
+  function redraw(){
+    log.replaceChildren();
+    if (!OP.messages.length) log.append(h('div',{class:'opmsg ai'}, 'Hi! Ask me about your stock, customers, invoices and sales, or tell me what to do, like "Invoice Dom for 200 squishy butters, he’s paying Zelle." I’ll show you every change before I make it.'));
+    for (const m of OP.messages){
+      if (typeof m.content==='string'){ say(m.role==='user' ? 'me' : 'ai', m.content); continue; }
+      for (const b of m.content){
+        if (b.type==='text' && b.text.trim()) say(m.role==='user' ? 'me' : 'ai', b.text.trim());
+        if (b.type==='tool_result' && b._card) log.append(b._card);
+      }
+    }
+    tryBox.hidden = OP.messages.length > 0; scroll();
+  }
+  // A change waiting for the person: resolves with true (Confirm) or false (Cancel).
+  function confirmCard(plan){
+    return new Promise(res=>{
+      const yes = h('button',{class:'btn primary',type:'button'}, plan.confirm), no = h('button',{class:'btn',type:'button'},'Cancel');
+      const foot = h('div',{class:'foot'}, no, yes);
+      const card = h('div',{class:'opcard'}, h('h4',{}, plan.title), plan.rows.map(([k,v])=>h('div',{class:'ln'}, h('span',{},k), h('b',{},v))), foot);
+      log.append(card); scroll();
+      const finish = v=>{ yes.disabled = no.disabled = true; foot.remove(); card.classList.add('done'); res({v, card}); };
+      yes.onclick = ()=>finish(true); no.onclick = ()=>finish(false);
+    });
+  }
+  function messageCard(a){
+    const f = (a.customer_id || a.customer_name) ? opFindCustomer(a) : {};
+    const c = f.c || null, text = String(a.text||'');
+    const phone = c ? String(c.phone||'').replace(/[^\d+]/g,'') : '';
+    const copy = h('button',{class:'btn',type:'button',onclick:async()=>{ try { await navigator.clipboard.writeText(text); toast('Message copied'); } catch(e){ toast('Press and hold the text to copy it.'); } }},'Copy');
+    const card = h('div',{class:'opcard'}, h('h4',{}, 'Message'+(c ? ' to '+c.name : '')), h('div',{style:'white-space:pre-wrap;font-size:14px'}, text),
+      h('div',{class:'foot'}, copy, phone ? h('a',{class:'btn primary',href:'sms:'+phone+'?&body='+encodeURIComponent(text),style:'text-decoration:none;text-align:center'},'Open in Messages') : null,
+        c && c.email ? h('a',{class:'btn',href:'mailto:'+c.email+'?body='+encodeURIComponent(text),style:'text-decoration:none;text-align:center'},'Email') : null));
+    return {card, result:{shown:true, to:c ? c.name : '', has_phone:!!phone}};
+  }
+  async function runTools(uses){
+    const results = [];
+    for (const u of uses){
+      let out, card = null;
+      try {
+        if (OP_READ[u.name]) out = await OP_READ[u.name](u.input || {});
+        else if (u.name==='draft_message'){ const m = messageCard(u.input || {}); card = m.card; log.append(card); scroll(); out = m.result; }
+        else if (OP_WRITE[u.name]){
+          const plan = OP_WRITE[u.name].plan(u.input || {});
+          if (plan.error) out = {error:plan.error};
+          else {
+            const {v, card:c} = await confirmCard(plan); card = c;
+            if (!v){ out = {done:false, cancelled:true, note:'The person cancelled this.'}; c.append(h('p',{class:'hint',style:'margin:8px 0 0'},'Cancelled')); }
+            else {
+              out = await OP_WRITE[u.name].run(plan);
+              c.append(h('p',{class:out.done ? 'hint' : 'err',style:'margin:8px 0 0'}, out.done ? '✓ Done' : out.error));
+              if (out.done && out.open){ const k = out.open; c.append(h('button',{class:'linkbtn',type:'button',onclick:()=>{ closeSheet(); setTimeout(()=>openInvoice(k), 50); }},'Open '+invNumber(k))); }
+              delete out.open;
+            }
+          }
+        } else out = {error:'Unknown tool '+u.name};
+      } catch(e){ out = {error:String(e && e.message || e)}; }
+      const r = {type:'tool_result', tool_use_id:u.id, content:JSON.stringify(out), is_error:!!out.error};
+      Object.defineProperty(r, '_card', {value:card, enumerable:false});
+      results.push(r);
+    }
+    return results;
+  }
+  async function go(){
+    const text = input.value.trim(); if (!text || OP.busy) return;
+    if (OP.messages.length > 120) OP.messages = [];
+    input.value = ''; OP.busy = true; sendBtn.disabled = true; tryBox.hidden = true;
+    OP.messages.push({role:'user', content:[{type:'text', text}]}); say('me', text);
+    const op = await window.claude.use('operator');
+    const ctx = {today:localDay(nowIso()), brand:BRAND()};
+    try {
+      for (let step=0; step<10; step++){
+        const wait = h('div',{class:'opmsg note'}, h('span',{class:'opdots'}, step ? 'Working' : 'Thinking')); log.append(wait); scroll();
+        let r;
+        try { r = await op.turn(OP.messages, ctx); } finally { wait.remove(); }
+        OP.messages.push({role:'assistant', content:r.content});
+        for (const b of r.content) if (b.type==='text' && b.text.trim()) say('ai', b.text.trim());
+        const uses = r.content.filter(b=>b.type==='tool_use');
+        if (!uses.length) break;
+        OP.messages.push({role:'user', content:await runTools(uses)});
+      }
+    } catch(e){
+      say('note', e.message);
+      // Leave the conversation so it can carry on: drop a half-finished turn.
+      while (OP.messages.length && OP.messages[OP.messages.length-1].role==='assistant' && OP.messages[OP.messages.length-1].content.some(b=>b.type==='tool_use')) OP.messages.pop();
+    }
+    OP.busy = false; sendBtn.disabled = false; input.focus();
+  }
+  sendBtn.onclick = go;
+  input.addEventListener('keydown', e=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); go(); } });
+  if (mic){
+    let rec = null;
+    mic.onclick = ()=>{
+      if (rec){ rec.stop(); return; }
+      rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = false;
+      const before = input.value ? input.value.trim()+' ' : '';
+      rec.onresult = e=>{ let t = ''; for (const x of e.results) t += x[0].transcript; input.value = before + t; };
+      rec.onerror = e=>{ if (e.error==='not-allowed') toast('Allow the microphone for this site to talk to the Operator.'); };
+      rec.onend = ()=>{ rec = null; mic.classList.remove('on'); mic.setAttribute('aria-pressed','false'); if (input.value.trim()) go(); };
+      try { rec.start(); mic.classList.add('on'); mic.setAttribute('aria-pressed','true'); } catch(e){ rec = null; }
+    };
+  }
+  openSheet('Operator', h('div',{class:'opwrap'}, log, tryBox, h('div',{class:'opin'}, input, mic, sendBtn),
+    h('div',{style:'display:flex;justify-content:space-between;gap:10px;align-items:center'}, h('span',{class:'hint',style:'margin:0'}, 'Changes always wait for your Confirm.'), newBtn)), {noFocus:true});
+  redraw(); setTimeout(()=>input.focus(), 50);
+}
+
 /* ---------- TV dashboard ---------- */
 // A full-screen page for a TV in the warehouse: the TikTok LIVE (shared from another browser tab, since
 // TikTok can't be embedded), today's TikTok orders as they come in with a chime, top products, orders by
@@ -4794,6 +5121,7 @@ renderStatus(); renderTab();
     try { state.isAdmin = user ? ((await user.isOwner()) || (await user.canEdit())) : true; } catch(e){ state.isAdmin = true; }
     if (dl && state.isAdmin) $('#exportBtn').hidden = false;
     if (state.isAdmin) $('#tvBtn').hidden = false;
+    window.claude.use('operator').then(op=>op.status()).then(st=>{ $('#opBtn').hidden = !st.enabled; }).catch(()=>{});
     if (state.sample && state.isAdmin) $('#askBtn').hidden = false;
     if (state.sample && state.isAdmin) $('#liveBtn').hidden = false;
     renderStatus(); renderTab();

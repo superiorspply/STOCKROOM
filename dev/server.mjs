@@ -248,10 +248,38 @@ async function functions(req, res, url){
 async function mockClaude(req, res, url){
   if (req.method === 'GET') return send(res, 200, lastClaudeRequest || {});
   lastClaudeRequest = {headers:req.headers, body:JSON.parse((await readBody(req)).toString())};
+  // The Operator: a scripted stand-in that calls Stockroom's tools for a few phrases and sums up their results.
+  if (/Stockroom Operator/.test(JSON.stringify(lastClaudeRequest.body.system || ''))) return send(res, 200, mockOperator(lastClaudeRequest.body));
   const fail = lastClaudeRequest.body.messages[0].content.find(c => c.type === 'text' && /fail-please/.test(c.text));
   if (fail) return send(res, 500, {type:'error', error:{type:'api_error', message:'boom'}});
   send(res, 200, {id:'msg_mock', type:'message', role:'assistant', model:lastClaudeRequest.body.model, stop_reason:'end_turn', stop_sequence:null,
     content:[{type:'text', text:JSON.stringify(MOCK_INVOICE)}], usage:{input_tokens:1800, output_tokens:420}});
+}
+
+function mockOperator(body){
+  const msgs = body.messages, last = msgs[msgs.length - 1], blocks = Array.isArray(last.content) ? last.content : [{type:'text', text:String(last.content)}];
+  const reply = (content, stop) => ({id:'msg_op', type:'message', role:'assistant', model:body.model, stop_reason:stop || 'end_turn', stop_sequence:null,
+    content:[{type:'thinking', thinking:'', signature:'mock-signature'}].concat(content), usage:{input_tokens:900, output_tokens:60}});
+  const use = (name, input) => reply([{type:'tool_use', id:'toolu_' + Math.random().toString(36).slice(2), name, input}], 'tool_use');
+  const results = blocks.filter(b => b.type === 'tool_result');
+  if (results.length){
+    const lines = results.map(r => { let o = {}; try { o = JSON.parse(r.content); } catch(e){}
+      if (o.cancelled) return 'OK, I cancelled that.';
+      if (o.error) return 'Problem: ' + o.error;
+      if (o.invoice_no && o.done && o.total != null) return 'Created ' + o.invoice_no + ' for $' + o.total + '.';
+      if (o.invoice_no && o.done) return 'Recorded the payment on ' + o.invoice_no + (o.paid_in_full ? '. It is paid in full.' : '.');
+      if (o.invoices) return o.invoices.length ? 'Owed: ' + o.invoices.map(v => v.invoice_no + ' ' + v.customer + ' $' + v.balance).join(', ') + '.' : 'Nobody owes you anything.';
+      if (o.shown) return 'There is your message.';
+      return 'Done.'; });
+    return reply([{type:'text', text:lines.join('\n')}]);
+  }
+  const t = blocks.filter(b => b.type === 'text').map(b => b.text).join(' ');
+  let m;
+  if (/owe/i.test(t)) return use('list_invoices', {status:'unpaid'});
+  if ((m = /invoice (\w+) for (\d+) (.+)/i.exec(t))) return use('create_invoice', {customer_name:m[1], lines:[{item:m[3].trim(), qty:+m[2]}]});
+  if ((m = /paid \$?(\d+) (\w+) on (INV-\d+)/i.exec(t))) return use('record_payment', {invoice_no:m[3], amount:+m[1], method:m[2]});
+  if (/text/i.test(t)) return use('draft_message', {customer_name:'Dom', text:'Hi Dom, your order is ready.'});
+  return reply([{type:'text', text:'I can help with your stock, customers, invoices and sales.'}]);
 }
 
 // A stand-in TikTok Shop: an authorize page that sends you straight back with a code, token endpoints,

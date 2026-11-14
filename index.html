@@ -421,7 +421,8 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .tvctl button{background:#1c1c21;color:#f6f6f8;border:1px solid #27272e;border-radius:1vh;padding:.8vh .9vw;font:inherit;font-size:1.5vh;cursor:pointer;white-space:nowrap}
 #tv{grid-template-columns:minmax(0,1fr)}
 #tv .tvtop{position:relative}
-#tv .tvctl{position:absolute;left:50%;top:calc(100% + .6vh);transform:translateX(-50%);z-index:30;flex-wrap:wrap;justify-content:center;max-width:92vw;gap:.5vw;background:rgba(5,5,6,.92);border:1px solid #27272e;border-radius:1.6vh;padding:1vh 1vw;box-shadow:0 2vh 5vh rgba(0,0,0,.6)}
+#tv .tvctl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;flex-wrap:nowrap;justify-content:center;max-width:64vw;gap:.4vw}
+#tv .tvctl button,#tv .tvctl select{font-size:1.35vh!important;padding:.7vh .7vw!important}
 
 #tv .tvctl>*{flex-shrink:0}
 #tv .clock{white-space:nowrap}
@@ -519,6 +520,14 @@ details.sizes summary{cursor:pointer;color:var(--accent-text);font-weight:600;pa
 #tv .tvcity .cctl button{background:rgba(28,28,33,.85);color:#c3c3cc;border:1px solid #27272e;border-radius:99px;padding:.6vh 1.2vw;font:inherit;font-size:1.6vh;cursor:pointer}
 #tv .tvcity .cctl button[aria-pressed=true]{background:#e5192b;color:#fff;border-color:#e5192b}
 #tv .tvcity .cmsg{position:absolute;left:50%;bottom:3vh;transform:translateX(-50%);background:rgba(5,5,6,.8);border:1px solid #27272e;border-radius:99px;padding:1vh 2vw;font-size:2vh;color:#e8e8ee;white-space:nowrap}
+#tv .vidbtn{position:absolute;right:1.4vw;top:1.6vh;z-index:3;background:#e5192b;color:#fff;border:0;border-radius:99px;padding:1vh 1.6vw;font:inherit;font-size:1.8vh;font-weight:700;cursor:pointer;box-shadow:0 1vh 3vh rgba(229,25,43,.35)}
+#tv.idle .vidbtn{opacity:0;transition:opacity .4s}
+#tv .vstage{position:fixed;inset:0;z-index:90;background:#000;display:grid;place-items:center}
+#tv .vstage canvas{max-width:100vw;max-height:100vh;width:auto;height:100vh;aspect-ratio:16/9}
+#tv .vstage .vg{position:absolute;left:0;top:0;width:1280px;height:720px;opacity:0;pointer-events:none}
+#tv .vstage .rec{position:absolute;left:2vw;top:2vh;display:flex;align-items:center;gap:.8vw;font-size:1.8vh;color:#fff;background:rgba(0,0,0,.55);border-radius:99px;padding:.6vh 1.2vw}
+#tv .vstage .rec i{width:1.2vh;height:1.2vh;border-radius:50%;background:#e5192b;animation:tvpulse 1.2s infinite}
+#tv .vstage .stop{position:absolute;right:2vw;top:2vh;background:rgba(28,28,33,.9);color:#fff;border:1px solid #27272e;border-radius:99px;padding:.8vh 1.4vw;font:inherit;font-size:1.6vh;cursor:pointer}
 @media (prefers-reduced-motion:reduce){#tv .runner .av{animation:none}#tv .runner{transition:none}}
 @media (prefers-reduced-motion:reduce){#tv .onair.on,#tv .feed .o.new,#tv .tick div,#tv .pop{animation:none}}
 </style>
@@ -5052,7 +5061,8 @@ function tvMap(tt, T){
   const box = h('div',{class:'globe'}, h('div',{class:'gmsg'}, 'Loading the map…'));
   const legend = h('div',{class:'legend'}, h('span',{}, h('i',{style:'background:#ff5a64'}), 'New order'), h('span',{}, h('i',{style:'background:#ffb84d'}), 'On the way'), h('span',{}, h('i',{style:'background:#3ddc97'}), 'Delivered'));
   const stats = h('div',{class:'gstats'}), topStates = h('div',{class:'tops'});
-  const el = h('div',{class:'tvmap'}, box, h('div',{class:'gside'}, h('div',{class:'card'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Today across the country'), stats), h('div',{class:'card'}, h('div',{class:'lbl'},'Top states today'), topStates), h('div',{class:'fslot',style:'display:flex;min-height:0'})));
+  const vidBtn = h('button',{class:'vidbtn',type:'button',onclick:()=>makeVideo()},'🎬 Make today\u2019s video');
+  const el = h('div',{class:'tvmap'}, h('div',{style:'position:relative;min-height:0;display:grid'}, box, vidBtn), h('div',{class:'gside'}, h('div',{class:'card'}, h('div',{class:'lbl',style:'margin-bottom:1vh'},'Today across the country'), stats), h('div',{class:'card'}, h('div',{class:'lbl'},'Top states today'), topStates), h('div',{class:'fslot',style:'display:flex;min-height:0'})));
   const home = tvHome();
   const moving = s => s==='AWAITING_COLLECTION' || s==='IN_TRANSIT';
   const todayO = ()=>[...M.orders.values()];
@@ -5106,6 +5116,119 @@ function tvMap(tt, T){
     } while (token && ++guard < 100);
     M.loaded = true; paint();
   }
+  // Today's cinematic: a second globe (kept to 1280x720 so it records smoothly) plays a 45-second film of
+  // the day: space, the swoop into the US, the day's orders replayed hour by hour with packages flying out of
+  // the warehouse, the top states, and the end card, with music made on the spot. It is recorded straight to
+  // a video file (MP4 where the browser can, otherwise WebM) and offered to save.
+  async function makeVideo(){
+    if (!window.Globe || !window.MediaRecorder){ toast('Recording a video is not available in this browser.'); return; }
+    const LEN = (()=>{ try { return Math.max(3, +localStorage.getItem('ss_tvvideolen') || 45); } catch(e){ return 45; } })();
+    const W = 1280, H = 720;
+    const out = document.createElement('canvas'); out.width = W; out.height = H; const cx = out.getContext('2d');
+    const gbox = h('div',{class:'vg'}), rec = h('div',{class:'rec'}, h('i',{}), h('span',{}, 'Recording today\u2019s video…'));
+    const stopBtn = h('button',{class:'stop',type:'button'},'Stop');
+    const stage = h('div',{class:'vstage'}, gbox, out, rec, stopBtn);
+    el.closest('#tv').append(stage);
+    const all = todayO().filter(o=>o.t*1000 >= M.day && o.status!=='CANCELLED' && o.status!=='UNPAID').map(o=>({o, g:tvGeo(o)})).filter(x=>x.g).sort((a,b)=>a.o.t-b.o.t);
+    const shippedSet = new Set(todayO().filter(o=>moving(o.status) || o.status==='DELIVERED').map(o=>o.id));
+    const byState = new Map(); all.forEach(x=>byState.set(x.g.st, (byState.get(x.g.st)||0)+1));
+    const topSt = [...byState.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const total = all.length, gmv = round2(all.reduce((a,x)=>a+(x.o.gmv||0),0));
+    const g = window.Globe({rendererConfig:{preserveDrawingBuffer:true, antialias:true}})(gbox)
+      .width(W).height(H).backgroundColor('#000000')
+      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/earth-night.jpg')
+      .atmosphereColor('#ff5a64').atmosphereAltitude(0.18)
+      .pointLat('lat').pointLng('lng').pointColor('c').pointRadius(0.22).pointAltitude(0.012)
+      .arcStartLat(d=>d.s[0]).arcStartLng(d=>d.s[1]).arcEndLat(d=>d.e[0]).arcEndLng(d=>d.e[1])
+      .arcColor(()=>['rgba(255,90,100,0.95)','rgba(255,184,77,0.95)']).arcStroke(0.45).arcAltitudeAutoScale(0.4)
+      .arcDashLength(0.4).arcDashGap(2).arcDashInitialGap(()=>Math.random()).arcDashAnimateTime(1800)
+      .labelsData([{lat:home.lat, lng:home.lng, text:home.name}]).labelLat('lat').labelLng('lng').labelText('text').labelSize(1.2).labelDotRadius(0.5).labelColor(()=>'#ffffff').labelResolution(2)
+      .pointOfView({lat:20, lng:-60, altitude:4.2});
+    try { g.controls().enabled = false; } catch(e){}
+    const gl = gbox.querySelector('canvas');
+    // Music: a slow four-chord pad over a soft pulse, building, then resolving. Made with Web Audio.
+    const ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination();
+    const master = ac.createGain(); master.gain.value = 0.5; master.connect(dest); master.connect(ac.destination);
+    const t0 = ac.currentTime + 0.1, beat = 60/96, chords = [[220,261.6,329.6],[174.6,220,261.6],[261.6,329.6,392],[196,246.9,293.7]];
+    for (let bar=0; bar*4*beat < LEN; bar++){
+      const tb = t0 + bar*4*beat, ch = chords[bar % 4], build = Math.min(1, (bar*4*beat)/(LEN*0.7));
+      ch.forEach(f=>[f, f*2.003].forEach(ff=>{ const o = ac.createOscillator(), gn = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = ff;
+        lp.type = 'lowpass'; lp.frequency.value = 500 + 2200*build; gn.gain.setValueAtTime(0.0001, tb); gn.gain.exponentialRampToValueAtTime(0.05, tb + 0.6); gn.gain.exponentialRampToValueAtTime(0.0001, tb + 4*beat + 0.3);
+        o.connect(lp).connect(gn).connect(master); o.start(tb); o.stop(tb + 4*beat + 0.4); }));
+      for (let k=0;k<4;k++){ const tk = tb + k*beat; if (tk - t0 > LEN - 2) break; const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.setValueAtTime(110, tk); o.frequency.exponentialRampToValueAtTime(42, tk + 0.18);
+        gn.gain.setValueAtTime(0.0001, tk); gn.gain.exponentialRampToValueAtTime(0.35*(0.4 + build*0.6), tk + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, tk + 0.3); o.connect(gn).connect(master); o.start(tk); o.stop(tk + 0.32); }
+    }
+    const stream = out.captureStream(30); dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
+    // H.264 MP4 plays everywhere (QuickTime, iPhone, TikTok, Instagram); Chrome on a Mac records it. Otherwise WebM.
+    const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2','video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m)) || '';
+    const mr = new MediaRecorder(stream, mime ? {mimeType:mime, videoBitsPerSecond:8_000_000} : undefined), chunks = [];
+    mr.ondataavailable = e=>{ if (e.data && e.data.size) chunks.push(e.data); };
+    const day = new Date().toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
+    const ease = x=>x<0 ? 0 : x>1 ? 1 : x*x*(3-2*x);
+    const txt = (t, x, y, size, color, alpha, align, weight)=>{ cx.globalAlpha = Math.max(0, Math.min(1, alpha)); cx.fillStyle = color; cx.font = (weight||700)+' '+size+"px 'Bricolage Grotesque', system-ui, sans-serif"; cx.textAlign = align || 'left'; cx.fillText(t, x, y); cx.globalAlpha = 1; };
+    let raf = 0, stopped = false, shown = 0;
+    const T0 = performance.now();
+    // Camera moves: from space to the US, then drifting across it.
+    setTimeout(()=>g.pointOfView({lat:38, lng:-95, altitude:1.5}, LEN*1000*0.2), LEN*1000*0.08);
+    setTimeout(()=>g.pointOfView({lat:37, lng:-82, altitude:1.25}, LEN*1000*0.3), LEN*1000*0.34);
+    setTimeout(()=>g.pointOfView({lat:39, lng:-104, altitude:1.45}, LEN*1000*0.25), LEN*1000*0.66);
+    function frame(){
+      const sec = (performance.now() - T0)/1000, f = sec/LEN;
+      // Orders appear through the day as the film plays (from 30% to 75% of it).
+      const upto = Math.floor(total * ease((f - 0.3)/0.45));
+      if (upto !== shown){ shown = upto; const vis = all.slice(0, upto);
+        g.pointsData(vis.map(x=>({lat:x.g.lat, lng:x.g.lng, c:shippedSet.has(x.o.id) ? '#ffb84d' : '#ff5a64'})));
+        g.arcsData(vis.filter(x=>shippedSet.has(x.o.id)).slice(-260).map(x=>({s:[home.lat, home.lng], e:[x.g.lat, x.g.lng]}))); }
+      cx.clearRect(0,0,W,H); if (gl) cx.drawImage(gl, 0, 0, W, H);
+      const vg = cx.createLinearGradient(0,0,0,H); vg.addColorStop(0,'rgba(0,0,0,.55)'); vg.addColorStop(.35,'rgba(0,0,0,0)'); vg.addColorStop(.75,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.6)'); cx.fillStyle = vg; cx.fillRect(0,0,W,H);
+      // Title card.
+      const ti = ease(f/0.04) * (1 - ease((f-0.22)/0.05));
+      txt(BRAND(), W/2, H*0.44, 84, '#ffffff', ti, 'center', 800);
+      txt(day, W/2, H*0.44 + 58, 32, '#ffb4b9', ti, 'center', 600);
+      txt('Today on TikTok Shop', W/2, H*0.44 + 104, 26, '#c3c3cc', ti, 'center', 500);
+      // The replay: the clock of the day and the orders counting up.
+      const ri = ease((f-0.27)/0.04) * (1 - ease((f-0.8)/0.04));
+      if (ri > 0){
+        const at = all[Math.max(0, shown-1)], clock = at ? new Date(at.o.t*1000).toLocaleTimeString([], {hour:'numeric', minute:'2-digit', timeZone:'America/Los_Angeles'})+' PT' : '';
+        txt(fmtN(shown), 64, H - 92, 96, '#ffffff', ri, 'left', 800);
+        txt('orders today', 68, H - 52, 28, '#c3c3cc', ri, 'left', 500);
+        txt(clock, W - 64, H - 60, 44, '#ffb84d', ri, 'right', 700);
+        txt('Shipping from '+home.name, W - 64, 76, 26, '#ffffff', ri*0.85, 'right', 600);
+      }
+      // Top states.
+      const si = ease((f-0.62)/0.04) * (1 - ease((f-0.82)/0.04));
+      if (si > 0 && topSt.length){ txt('Top states today', 64, 88, 28, '#c3c3cc', si, 'left', 600);
+        topSt.forEach(([k,n],i)=>txt((i+1)+'. '+k+'  '+fmtN(n), 64, 140 + i*48, 36, '#ffffff', si * ease((f-0.63-i*0.012)/0.03), 'left', 700)); }
+      // End card.
+      const ei = ease((f-0.84)/0.05);
+      if (ei > 0){ cx.globalAlpha = ei*0.7; cx.fillStyle = '#000'; cx.fillRect(0,0,W,H); cx.globalAlpha = 1;
+        txt(fmtN(total)+' orders', W/2, H*0.42, 92, '#ffffff', ei, 'center', 800);
+        txt(byState.size+' states · '+shortMoney(gmv)+' in sales', W/2, H*0.42 + 66, 38, '#ffb84d', ei, 'center', 700);
+        txt(BRAND()+' · '+day, W/2, H*0.42 + 124, 26, '#c3c3cc', ei, 'center', 500); }
+      if (sec >= LEN || stopped){ finish(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    function finish(){
+      cancelAnimationFrame(raf);
+      if (mr.state !== 'inactive') mr.stop();
+    }
+    mr.onstop = async ()=>{
+      try { ac.close(); } catch(e){}
+      try { g._destructor && g._destructor(); } catch(e){}
+      stage.remove();
+      if (stopped && !chunks.length) return;
+      const type = (mr.mimeType || mime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, {type});
+      const name = (BRAND()+'-'+localDay(nowIso())).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.'+ext;
+      try { if (state.dl) await state.dl.save({filename:name, data:blob}); else throw new Error('no downloads'); }
+      catch(e){ if (!(e && e.code==='declined')){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); } }
+      toast('Saved '+name);
+    };
+    stopBtn.onclick = ()=>{ stopped = true; };
+    // Give the globe a moment to draw its texture, then roll.
+    setTimeout(()=>{ mr.start(1000); raf = requestAnimationFrame(frame); }, 1200);
+  }
+
   async function start(){
     try {
       await loadScript('js/geo-us.js');

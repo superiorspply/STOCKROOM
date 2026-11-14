@@ -15,6 +15,7 @@ try {
   // The browser's screen-share picker can't be clicked in a test: hand back a moving canvas as "the LIVE tab".
   await ctx.addInitScript(() => {
     try { localStorage.setItem('ss_tvpoll', '2500'); } catch(e){}
+    try { localStorage.setItem('ss_tvvideolen', '4'); } catch(e){}   // a 4-second film instead of 45
     // The commentator's voice: record what it says instead of speaking.
     window.__said = [];
     window.SpeechSynthesisUtterance = function(text){ this.text = text; };
@@ -76,6 +77,16 @@ try {
   await tv.locator('.gstats .y b').filter({hasText:/^39$/}).waitFor({timeout:10000});
   check(true, 'a newly shipped order starts flying on the map');
   if (process.env.SHOT2) { await P.waitForTimeout(2500); await P.screenshot({path:process.env.SHOT2}); }
+  // Today's video: a short film recorded from the globe, offered to save.
+  const [film] = await Promise.all([P.waitForEvent('download', {timeout:60000}), (async () => {
+    await tv.getByRole('button', {name:/Make today.s video/}).click();
+    await tv.locator('.vstage canvas').first().waitFor({timeout:10000});
+    if (process.env.SHOT5) { await P.waitForTimeout(3500); await P.screenshot({path:process.env.SHOT5}); }
+  })()]);
+  const fs = await import('node:fs');
+  const size = fs.statSync(await film.path()).size;
+  check(/\.(mp4|webm)$/.test(film.suggestedFilename()) && size > 10000, 'Make today\'s video records the globe film and saves it (' + film.suggestedFilename() + ', ' + Math.round(size / 1024) + ' KB)');
+  await tv.locator('.vstage').waitFor({state:'detached', timeout:10000});
   // The race: products race, a sale moves one forward, and the commentator calls it.
   await tv.getByRole('button', {name:'Race', exact:true}).click();
   await tv.locator('.tvrace .lane').first().waitFor({timeout:5000});

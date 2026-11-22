@@ -36,6 +36,47 @@ html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-text-size-adjust:100%}
 body.locked{overflow:hidden}
+/* bills */
+.billtop{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:0 0 12px}
+.billtop div{display:grid;gap:2px;min-width:0}.billtop b{font-size:17px}.billtop span{font-size:13px;color:var(--muted)}
+.billempty{display:grid;gap:8px;justify-items:start;padding:22px}.billempty p{margin:0;color:var(--muted);max-width:52ch}
+.billrow .attl{display:grid;gap:3px}.billbadges{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.billview{position:fixed;inset:0;z-index:70;background:var(--bg);display:grid;grid-template-rows:auto 1fr;padding-top:env(safe-area-inset-top,0px)}
+.bvbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--surface)}
+.bvtitle{font-size:16px;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
+.bvtools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.tbtn{border:1px solid var(--line);background:var(--surface2);color:var(--muted);border-radius:10px;padding:7px 11px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.tbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.swatch{width:24px;height:24px;border-radius:50%;border:2px solid var(--surface2);cursor:pointer;padding:0}
+.swatch[aria-pressed=true]{outline:2px solid var(--ink);outline-offset:1px}
+.bvsep{width:1px;height:22px;background:var(--line);margin:0 2px}
+.bvstat{font-size:12.5px;color:var(--muted);min-width:70px}
+.bvmain{display:grid;grid-template-columns:minmax(0,1fr) 370px;min-height:0}
+.bvpages{overflow:auto;padding:18px max(14px,env(safe-area-inset-left,0px)) 40px;display:grid;gap:16px;justify-items:center;align-content:start;background:#1a1a1f}
+.bvpage{position:relative;width:min(100%,900px);max-width:100%;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.45);border-radius:4px}
+.bvpage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.bvink{touch-action:none;cursor:crosshair}
+.bvpages[data-tool=text] .bvink{cursor:text}.bvpages[data-tool=erase] .bvink{cursor:cell}
+.bvtext{position:absolute;z-index:2;min-width:160px;max-width:60%;background:rgba(255,255,255,.96);border:1.5px dashed currentColor;border-radius:6px;padding:4px 6px;font:600 15px system-ui,-apple-system,sans-serif;resize:none}
+.bvload{color:#c3c3cc;margin:40px 0}
+.bvside{overflow:auto;border-left:1px solid var(--line);padding:16px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) 16px;display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:2px;background:var(--surface);overflow-x:hidden}
+.bvpay{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0 14px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.bvpay > div{display:grid;gap:4px}
+.bvpaid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 10px}.bvpaid[hidden],.bvconfirm[hidden]{display:none}
+.bv2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 10px}
+.bvside > *,.bvside .field{min-width:0}.bvside input,.bvside select{min-width:0;max-width:100%}
+.seg3{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.seg3 button{border:0;background:var(--surface2);color:var(--muted);padding:10px 6px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.seg3 button + button{border-left:1px solid var(--line)}
+.seg3 button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent-text)}
+.bvconfirm{border:1px solid rgba(255,107,107,.45);border-radius:14px;padding:12px;margin-top:10px}.bvconfirm p{margin:0 0 10px}
+@media (max-width:860px){
+  .bvmain{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;overflow:auto}
+  .bvpages{overflow:visible}
+  .bvside{border-left:0;border-top:1px solid var(--line);overflow:visible}
+  .billview{overflow:auto}
+  .bvtitle{max-width:60vw}
+}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent-hi);outline-offset:2px}
 .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace}
@@ -698,6 +739,7 @@ function subscribe(){
   state.db.doc('settings/orders').onSnapshot(d=>{
     if (d.exists){ const v = d.data() || {}; if (num(v.medium)>=2 && num(v.large)>num(v.medium)) state.orderQty = {medium:int(v.medium), large:int(v.large)}; }
   }, ()=>{});
+  if (state.isAdmin) state.db.collection('bills').onSnapshot(snap=>{ state.bills = snap.docs.map(d=>Object.assign({id:d.id}, d.data())); renderBillsIfOpen(); }, ()=>{ state.bills = []; });
   if (state.isAdmin) state.db.doc('settings/stockx').onSnapshot(d=>{ state.stockx = d.exists ? (d.data()||{}) : null; }, ()=>{});
   state.db.collection('employees').onSnapshot(snap=>{ state.employees = snap.docs.map(d=>Object.assign({id:d.id}, d.data())); state.loaded.employees = true; if (state.clockRefresh) state.clockRefresh(); }, ()=>{ state.loaded.employees = true; });
   state.db.collection('shifts').onSnapshot(snap=>{ state.shifts = snap.docs.map(d=>Object.assign({id:d.id}, d.data())); state.loaded.shifts = true; if (state.clockRefresh) state.clockRefresh(); }, ()=>{});
@@ -1944,7 +1986,8 @@ function renderReports(){
   if (state.status==='offline' && !state.loaded.sales){ host.append(h('p',{class:'empty'},'Reports cannot load because storage is not available in this view.')); return; }
   if (!state.loaded.sales || !state.loaded.items || !state.loaded.customers || !state.loaded.invoices){ host.append(h('p',{class:'empty'},'Loading reports…')); return; }
   if (state.rview==='tiktok' && !state.tiktokOn) state.rview = 'sales';
-  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping']].concat(state.tiktokOn ? [['tiktok','TikTok Shop']] : []).map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
+  host.append(h('div',{class:'chips'}, [['sales','Sales'],['shipping','Shipping']].concat(state.tiktokOn ? [['tiktok','TikTok Shop']] : [], [['bills','Bills']]).map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(state.rview===k),onclick:()=>{ state.rview = k; renderList(); }}, l))));
+  if (state.rview==='bills'){ renderBills(); return; }
   host.append(rangeChips(state.rrange, renderList));
   const b = rangeBounds(state.rrange);
   if (state.rview==='shipping'){ renderShipping(b); return; }
@@ -1992,6 +2035,229 @@ function renderShipping(b){
       h('span',{class:'attl'}, h('span',{}, v.customerName || 'No customer'), h('small',{}, v.no+' · '+fmtDate(v.first.at))), h('span',{class:'attv'}, money(shipOfInv(v))), h('span',{class:'attc','aria-hidden':'true'},'›')))));
 }
 
+
+/* ---------- Bills (supplier invoices) ---------- */
+// Supplier invoices kept as files (a PDF or a photo) in bills/<id>, owners and admins only. They never touch
+// inventory: a bill records who it is from, whether the order came in complete, whether it is paid, and notes
+// written on the pages. The file sits in the private "bills" storage (the `bills` runtime); the notes are kept
+// in the document as strokes and text in page fractions (marks: {"1":[…], "2":[…]}), drawn over the pages by
+// pdf.js and written into a copy of the PDF by pdf-lib for "Download with notes".
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const BILL_RECEIVED = [['unchecked','Not checked'],['complete','Complete'],['incomplete','Incomplete']];
+const billReceivedLabel = v => (BILL_RECEIVED.find(x=>x[0]===v) || BILL_RECEIVED[0])[1];
+const billBadge = b => h('span',{class:'badge '+(b.paid ? 'b-in' : 'b-bad')}, b.paid ? 'Paid' : 'Unpaid');
+const billRecvBadge = b => h('span',{class:'badge '+(b.received==='complete' ? 'b-in' : b.received==='incomplete' ? 'b-q' : 'b-out')}, billReceivedLabel(b.received));
+const billTitle = b => b.vendor || (b.name ? b.name.replace(/\.(pdf|jpe?g|png|webp)$/i,'') : 'Bill');
+const billOverdue = b => !b.paid && b.due && b.due < localDay(nowIso());
+let billsApi = null;
+async function billsRuntime(){ if (!billsApi) billsApi = await window.claude.use('bills'); return billsApi; }
+
+function renderBills(){
+  const all = (state.bills||[]).slice().sort((a,b)=>String(b.date||b.at).localeCompare(String(a.date||a.at)));
+  const unpaid = all.filter(b=>!b.paid), owed = round2(unpaid.reduce((a,b)=>a+num(b.amount),0));
+  const picker = h('input',{type:'file',accept:'application/pdf,image/jpeg,image/png,image/webp,.pdf',multiple:true,hidden:true,id:'billFile',onchange:e=>{ addBills([...e.target.files]); e.target.value = ''; }});
+  host.append(h('div',{class:'billtop'},
+    h('div',{}, h('b',{}, 'Bills'), h('span',{}, 'Supplier invoices you keep here. Adding one never changes your inventory.')),
+    h('button',{class:'btn primary',type:'button',onclick:()=>picker.click()}, '+ Add a bill'), picker));
+  host.append(h('div',{class:'sum'}, stat(money(owed),'unpaid'), stat(String(unpaid.length),'unpaid bills'), stat(String(all.filter(b=>b.received==='incomplete').length),'came in incomplete')));
+  const f = state.bfilter || 'all';
+  host.append(h('div',{class:'chips'}, [['all','All'],['unpaid','Unpaid'],['paid','Paid'],['incomplete','Incomplete'],['unchecked','Not checked']].map(([k,l])=>h('button',{class:'chip',type:'button','aria-pressed':String(f===k),onclick:()=>{ state.bfilter = k; renderList(); }}, l))));
+  const q = (state.bq||'').trim().toLowerCase();
+  host.append(h('div',{class:'searchrow',style:'margin:0 0 10px'}, h('input',{class:'search',type:'search',placeholder:'Search supplier, invoice # or notes',value:state.bq||'','aria-label':'Search bills',oninput:e=>{ state.bq = e.target.value; clearTimeout(state.bqT); state.bqT = setTimeout(()=>{ renderList(); const s = host.querySelector('input[type=search]'); if (s){ s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 250); }})));
+  const list = all.filter(b=>(f==='all' || (f==='unpaid' && !b.paid) || (f==='paid' && b.paid) || (f==='incomplete' && b.received==='incomplete') || (f==='unchecked' && (b.received||'unchecked')==='unchecked'))
+    && (!q || [b.vendor,b.number,b.note,b.missing,b.name].some(x=>String(x||'').toLowerCase().includes(q))));
+  if (!all.length){
+    host.append(h('div',{class:'row wide billempty'}, h('b',{}, 'No bills yet'), h('p',{}, 'Add a supplier invoice as a PDF or a photo. You can mark whether it came in complete, whether you paid it, and write notes right on the pages.'), h('button',{class:'btn primary',type:'button',onclick:()=>picker.click()}, '+ Add a bill')));
+    return;
+  }
+  if (!list.length){ host.append(h('p',{class:'empty'}, 'No bills match.')); return; }
+  host.append(h('div',{class:'row wide'}, list.map(b=>{
+    const marks = Object.values(b.marks||{}).reduce((a,p)=>a+p.length,0);
+    return h('button',{class:'att billrow',type:'button',onclick:()=>openBill(b.id)},
+      h('span',{class:'attl'}, h('span',{}, billTitle(b)),
+        h('small',{}, [b.number ? '#'+b.number : '', b.date ? fmtDate(b.date+'T12:00') : '', b.due && !b.paid ? (billOverdue(b) ? 'Overdue since ' : 'Due ')+fmtDate(b.due+'T12:00') : '', marks ? marks+' note'+(marks===1?'':'s')+' on it' : ''].filter(Boolean).join(' · ') || fmtDate(b.at)),
+        h('span',{class:'billbadges'}, billBadge(b), billRecvBadge(b), billOverdue(b) ? h('span',{class:'badge b-bad'}, 'Overdue') : null)),
+      h('span',{class:'attv'}, num(b.amount) ? money(num(b.amount)) : ''), h('span',{class:'attc','aria-hidden':'true'},'›'));
+  })));
+}
+
+async function addBills(files){
+  if (!files.length) return;
+  let api; try { api = await billsRuntime(); } catch(e){ toast(e.message); return; }
+  let firstId = null;
+  for (const file of files){
+    toast('Adding '+file.name+'…');
+    try {
+      const f = await api.upload(file), ref = state.db.collection('bills').doc();
+      const ok = await write(()=>ref.set({name:file.name, vendor:'', number:'', amount:0, date:localDay(nowIso()), due:'', received:'unchecked', missing:'', paid:false, paidOn:'', paidHow:'', note:'',
+        file:f, marks:{}, at:nowIso()}));
+      if (ok && !firstId) firstId = ref.id;
+    } catch(e){ toast(e.message || 'Could not add '+file.name); }
+  }
+  if (firstId){ toast(files.length > 1 ? 'Added '+files.length+' bills' : 'Bill added'); setTimeout(()=>openBill(firstId), 300); }
+}
+
+// The bill viewer: the pages with a pen, highlighter, text and eraser on top, and the bill's details beside them.
+function openBill(id){
+  const b0 = (state.bills||[]).find(x=>x.id===id); if (!b0) return;
+  const B = {id, marks:JSON.parse(JSON.stringify(b0.marks||{})), tool:'pen', color:'#e5192b', pages:[], undo:[], saveT:null, dirty:false, closed:false};
+  const ref = state.db.doc('bills/'+id);
+  const saveMarks = ()=>{ clearTimeout(B.saveT); B.dirty = true; B.saveT = setTimeout(flush, 700); status.textContent = 'Saving…'; };
+  const flush = async ()=>{ if (!B.dirty) return; B.dirty = false; const ok = await write(()=>ref.update({marks:B.marks})); status.textContent = ok ? 'Notes saved' : 'Not saved'; };
+  const patch = async p=>{ const ok = await write(()=>ref.update(p)); if (ok) Object.assign(cur(), p); return ok; };
+  const cur = ()=>(state.bills||[]).find(x=>x.id===id) || b0;
+
+  // Toolbar.
+  const tools = [['pen','Pen'],['hl','Highlight'],['text','Text'],['erase','Eraser']];
+  const toolBtns = tools.map(([k,l])=>h('button',{type:'button',class:'tbtn','aria-pressed':String(B.tool===k),onclick:()=>{ B.tool = k; toolBtns.forEach((x,i)=>x.setAttribute('aria-pressed', String(tools[i][0]===k))); stage.dataset.tool = k; }}, l));
+  const colors = ['#e5192b','#1f6feb','#111111','#12a150'];
+  const colorBtns = colors.map(c=>h('button',{type:'button',class:'swatch','aria-label':'Colour '+c,'aria-pressed':String(B.color===c),style:'background:'+c,onclick:()=>{ B.color = c; colorBtns.forEach((x,i)=>x.setAttribute('aria-pressed', String(colors[i]===c))); }}));
+  const undoBtn = h('button',{type:'button',class:'tbtn',onclick:()=>{ const u = B.undo.pop(); if (!u) return; B.marks = u; B.pages.forEach(p=>p.redraw()); saveMarks(); }}, 'Undo');
+  const status = h('span',{class:'bvstat'}, '');
+  const dlBtn = h('button',{type:'button',class:'btn',onclick:()=>downloadBill(cur(), B.marks)}, 'Download with notes');
+  const closeBtn = h('button',{type:'button',class:'icon-btn','aria-label':'Close',onclick:()=>close()}, '×');
+  const bar = h('div',{class:'bvbar'}, h('b',{class:'bvtitle'}, billTitle(b0)), h('div',{class:'bvtools'}, ...toolBtns, h('span',{class:'bvsep'}), ...colorBtns, undoBtn), status, dlBtn, closeBtn);
+  const stage = h('div',{class:'bvpages','data-tool':'pen'}, h('p',{class:'bvload'}, 'Opening the bill…'));
+
+  // Details.
+  const fld = (label, input)=>h('label',{class:'field'}, h('span',{class:'lbl'}, label), input);
+  const inp = (k, type, extra)=>{ const el = h('input',Object.assign({type:type||'text',value:String(cur()[k]??''),onchange:()=>patch({[k]: type==='number' ? round2(num(el.value)) : el.value.trim()})}, extra||{})); return el; };
+  const recvSeg = h('div',{class:'seg3',role:'group','aria-label':'Order received'}, BILL_RECEIVED.map(([k,l])=>h('button',{type:'button','aria-pressed':String((cur().received||'unchecked')===k),onclick:async e=>{ if (await patch({received:k})){ [...recvSeg.children].forEach(x=>x.setAttribute('aria-pressed', String(x===e.currentTarget))); missF.hidden = k!=='incomplete'; } }}, l)));
+  const missF = fld('What was missing or wrong', h('textarea',{rows:2,placeholder:'e.g. 2 cases of Squishy Butter short',onchange:e=>patch({missing:e.target.value.trim()})}, cur().missing||'')); missF.hidden = cur().received!=='incomplete';
+  const paidOn = inp('paidOn','date'), paidHow = h('select',{onchange:e=>patch({paidHow:e.target.value})}, ['','Bank transfer','Card','Check','Cash','Zelle','PayPal','Other'].map(v=>{ const o = h('option',{value:v}, v || 'How was it paid?'); if ((cur().paidHow||'')===v) o.selected = true; return o; }));
+  const paidBox = h('div',{class:'bvpaid',hidden:!cur().paid}, fld('Paid on', paidOn), fld('Paid by', paidHow));
+  const paidBtn = h('button',{type:'button',class:'btn '+(cur().paid ? '' : 'primary'),onclick:async ()=>{ const now = !cur().paid; const p = {paid:now}; if (now && !cur().paidOn){ p.paidOn = localDay(nowIso()); paidOn.value = p.paidOn; }
+    if (await patch(p)){ paidBtn.textContent = now ? 'Mark as unpaid' : 'Mark as paid'; paidBtn.className = 'btn '+(now ? '' : 'primary'); paidState.replaceWith(paidState = billBadge(cur())); paidBox.hidden = !now; renderBillsIfOpen(); } }}, cur().paid ? 'Mark as unpaid' : 'Mark as paid');
+  let paidState = billBadge(cur());
+  const side = h('div',{class:'bvside'},
+    h('div',{class:'bvpay'}, h('div',{}, h('span',{class:'lbl'}, 'Payment'), paidState), paidBtn), paidBox,
+    fld('Supplier', inp('vendor','text',{placeholder:'Who is the bill from?'})),
+    h('div',{class:'bv2'}, fld('Invoice #', inp('number')), fld('Amount', inp('amount','number',{step:'0.01',min:'0',inputmode:'decimal'}))),
+    h('div',{class:'bv2'}, fld('Invoice date', inp('date','date')), fld('Due date', inp('due','date'))),
+    h('div',{class:'field'}, h('span',{class:'lbl'}, 'Order received'), recvSeg), missF,
+    fld('Notes', h('textarea',{rows:3,placeholder:'Anything to remember about this bill',onchange:e=>patch({note:e.target.value.trim()})}, cur().note||'')),
+    h('p',{class:'hint'}, 'Draw or type on the pages to mark them up. The original file stays as it was; your notes are saved with the bill.'),
+    h('button',{type:'button',class:'btn danger',onclick:()=>delConfirm()}, 'Delete bill'));
+  const delConfirm = ()=>{ const box = h('div',{class:'bvconfirm'}, h('p',{}, 'Delete this bill and its file? This cannot be undone.'),
+      h('div',{class:'foot'}, h('button',{class:'btn',type:'button',onclick:()=>box.remove()}, 'Keep it'), h('button',{class:'btn danger',type:'button',onclick:async ()=>{
+        const f = cur().file; if (await write(()=>ref.delete())){ try { (await billsRuntime()).remove(f.path); } catch(e){} toast('Bill deleted'); close(true); } }}, 'Delete')));
+    side.append(box); box.scrollIntoView({block:'nearest'}); };
+
+  const root = h('div',{class:'billview',role:'dialog','aria-modal':'true','aria-label':billTitle(b0)}, bar, h('div',{class:'bvmain'}, stage, side));
+  document.body.append(root); document.body.classList.add('locked');
+  const onKey = e=>{ if (e.key==='Escape' && !e.target.closest('input,textarea,select')) close(); if ((e.metaKey||e.ctrlKey) && e.key==='z' && !e.target.closest('input,textarea')){ e.preventDefault(); undoBtn.click(); } };
+  document.addEventListener('keydown', onKey);
+  async function close(deleted){ if (B.closed) return; B.closed = true; clearTimeout(B.saveT); if (!deleted) await flush(); document.removeEventListener('keydown', onKey); root.remove(); if (!$('#modalRoot').children.length) document.body.classList.remove('locked'); renderBillsIfOpen(); }
+
+  // The pages: each a canvas with the bill drawn on it and a second canvas for the notes on top.
+  const snapshot = ()=>{ B.undo.push(JSON.parse(JSON.stringify(B.marks))); if (B.undo.length > 60) B.undo.shift(); };
+  function page(n, w, hgt, drawBase){
+    const base = h('canvas',{class:'bvbase'}), ink = h('canvas',{class:'bvink'}), wrap = h('div',{class:'bvpage','data-page':String(n),style:'aspect-ratio:'+w+'/'+hgt}, base, ink);
+    const P = {n, wrap, base, ink, w, hgt};
+    const fit = ()=>{ const r = wrap.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio||1); [base, ink].forEach(c=>{ c.width = Math.round(r.width*dpr); c.height = Math.round(r.height*dpr); }); return {W:base.width, H:base.height}; };
+    P.render = async ()=>{ const {W, H} = fit(); await drawBase(base.getContext('2d'), W, H); P.redraw(); };
+    P.redraw = ()=>{ const c = ink.getContext('2d'), W = ink.width, H = ink.height; c.clearRect(0,0,W,H); for (const m of (B.marks[n]||[])) drawMark(c, m, W, H); if (P.live) drawMark(c, P.live, W, H); };
+    const pt = e=>{ const r = ink.getBoundingClientRect(); return [Math.max(0, Math.min(1, (e.clientX - r.left)/r.width)), Math.max(0, Math.min(1, (e.clientY - r.top)/r.height))]; };
+    ink.addEventListener('pointerdown', e=>{
+      if (e.button > 0) return; const p = pt(e);
+      if (B.tool==='text'){ e.preventDefault(); placeText(P, p); return; }
+      if (B.tool==='erase'){ eraseAt(P, p); P.erasing = true; ink.setPointerCapture(e.pointerId); return; }
+      e.preventDefault(); ink.setPointerCapture(e.pointerId);
+      P.live = {t:B.tool==='hl' ? 'hl' : 'pen', c:B.color, w:B.tool==='hl' ? 0.018 : 0.0028, p:[p]}; P.redraw();
+    });
+    ink.addEventListener('pointermove', e=>{
+      if (P.erasing){ eraseAt(P, pt(e)); return; }
+      if (!P.live) return; const p = pt(e), l = P.live.p[P.live.p.length-1];
+      if (Math.hypot(p[0]-l[0], p[1]-l[1]) > 0.0015){ P.live.p.push(p); P.redraw(); }
+    });
+    const end = ()=>{ P.erasing = false; if (!P.live) return; const m = P.live; P.live = null;
+      if (m.p.length === 1) m.p.push([m.p[0][0] + 0.001, m.p[0][1]]);
+      m.p = m.p.map(([x,y])=>[Math.round(x*10000)/10000, Math.round(y*10000)/10000]);
+      snapshot(); (B.marks[n] = B.marks[n] || []).push(m); P.redraw(); saveMarks(); };
+    ink.addEventListener('pointerup', end); ink.addEventListener('pointercancel', end);
+    return P;
+  }
+  function eraseAt(P, [x, y]){
+    const list = B.marks[P.n] || [], r = 0.012;
+    const i = list.findIndex(m=>m.t==='text' ? (x >= m.x - r && x <= m.x + Math.max(0.05, m.s*0.55*m.text.length*(P.hgt/P.w)) && y >= m.y - m.s - r && y <= m.y + r)
+      : m.p.some(([a,b2])=>Math.hypot(a - x, b2 - y) < r + m.w));
+    if (i < 0) return; snapshot(); list.splice(i, 1); P.redraw(); saveMarks();
+  }
+  function placeText(P, [x, y]){
+    const r = P.wrap.getBoundingClientRect(), box = h('textarea',{class:'bvtext',rows:1,placeholder:'Type a note',style:'left:'+(x*100)+'%;top:'+(y*100)+'%;color:'+B.color});
+    let done = false;
+    const commit = ()=>{ if (done) return; done = true; const t = box.value.trim(); box.remove(); if (!t) return;
+      const s = Math.max(0.014, 15/r.height);   // text height as a share of the page
+      snapshot(); (B.marks[P.n] = B.marks[P.n] || []).push({t:'text', x:Math.round(x*10000)/10000, y:Math.round((y + s*0.8)*10000)/10000, s:Math.round(s*10000)/10000, c:B.color, text:t.slice(0, 400)}); P.redraw(); saveMarks(); };
+    box.addEventListener('keydown', e=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); commit(); } if (e.key==='Escape'){ done = true; box.remove(); } });
+    box.addEventListener('blur', commit);
+    P.wrap.append(box); setTimeout(()=>box.focus(), 0);
+  }
+
+  // Loads the file and lays out its pages.
+  (async ()=>{
+    try {
+      const api = await billsRuntime(), blob = await api.open(b0.file.path), isPdf = (b0.file.type||'').includes('pdf');
+      if (B.closed) return;
+      stage.replaceChildren();
+      if (isPdf){
+        const lib = await loadPdfJs(), doc = await lib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;
+        for (let n=1; n<=doc.numPages; n++){
+          const pg = await doc.getPage(n), vp = pg.getViewport({scale:1});
+          const P = page(n, vp.width, vp.height, async (ctx, W, H)=>{ const v = pg.getViewport({scale:W/vp.width}); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H); await pg.render({canvasContext:ctx, viewport:v}).promise; });
+          B.pages.push(P); stage.append(P.wrap);
+        }
+      } else {
+        const url = URL.createObjectURL(blob), im = new Image(); im.src = url; await im.decode();
+        const P = page(1, im.naturalWidth, im.naturalHeight, async (ctx, W, H)=>{ ctx.drawImage(im, 0, 0, W, H); });
+        B.pages.push(P); stage.append(P.wrap);
+      }
+      for (const P of B.pages){ if (B.closed) return; await P.render(); }
+      root.dataset.ready = '1';
+      let rzT = null; B.ro = new ResizeObserver(()=>{ clearTimeout(rzT); rzT = setTimeout(()=>B.pages.forEach(P=>P.render()), 200); }); B.ro.observe(stage);
+    } catch(e){ stage.replaceChildren(h('p',{class:'bvload'}, e.message || 'Could not open the bill.')); }
+  })();
+}
+function drawMark(c, m, W, H){
+  if (m.t==='text'){ c.fillStyle = m.c; c.font = '600 '+Math.round(m.s*H)+'px system-ui, -apple-system, sans-serif'; c.textBaseline = 'alphabetic';
+    String(m.text).split('\n').forEach((line, i)=>c.fillText(line, m.x*W, m.y*H + i*m.s*H*1.2)); return; }
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = m.t==='hl' ? '#ffe600' : m.c; c.globalAlpha = m.t==='hl' ? 0.38 : 1; c.lineWidth = Math.max(1, m.w*W);
+  c.beginPath(); m.p.forEach(([x,y], i)=>i ? c.lineTo(x*W, y*H) : c.moveTo(x*W, y*H)); c.stroke(); c.restore();
+}
+async function loadPdfJs(){
+  await loadScript(PDFJS+'pdf.min.js');
+  const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = PDFJS+'pdf.worker.min.js';
+  return lib;
+}
+function renderBillsIfOpen(){ if (state.tab==='reports' && state.rview==='bills' && host && !document.querySelector('.billview')) renderList(); }
+
+// A copy of the bill with the notes written into it (pdf-lib), offered as a download. A photo bill is
+// saved as a PNG with the notes drawn on.
+async function downloadBill(b, marks){
+  try {
+    toast('Preparing the file…');
+    const api = await billsRuntime(), blob = await api.open(b.file.path), base = billTitle(b).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'bill';
+    if (!(b.file.type||'').includes('pdf')){
+      const im = new Image(); im.src = URL.createObjectURL(blob); await im.decode();
+      const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+      for (const m of (marks[1]||[])) drawMark(x, m, c.width, c.height);
+      const out = await new Promise(r=>c.toBlob(r, 'image/png'));
+      await state.dl.save({filename:base+'-with-notes.png', data:out}); return;
+    }
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+    const {PDFDocument, rgb, StandardFonts, LineCapStyle} = window.PDFLib, doc = await PDFDocument.load(await blob.arrayBuffer(), {ignoreEncryption:true});
+    const font = await doc.embedFont(StandardFonts.HelveticaBold), col = hex=>{ const n = parseInt(hex.slice(1), 16); return rgb((n>>16&255)/255, (n>>8&255)/255, (n&255)/255); };
+    doc.getPages().forEach((pg, i)=>{
+      const {width:W, height:H} = pg.getSize();
+      for (const m of (marks[i+1]||[])){
+        if (m.t==='text'){ String(m.text).split('\n').forEach((line, k)=>{ try { pg.drawText(line.replace(/[^\x20-\x7e]/g,'?'), {x:m.x*W, y:H - m.y*H - k*m.s*H*1.2, size:m.s*H, font, color:col(m.c)}); } catch(e){} }); continue; }
+        const hl = m.t==='hl', th = Math.max(0.6, m.w*W);
+        for (let k=1; k<m.p.length; k++) pg.drawLine({start:{x:m.p[k-1][0]*W, y:H - m.p[k-1][1]*H}, end:{x:m.p[k][0]*W, y:H - m.p[k][1]*H}, thickness:th, color:hl ? rgb(1, 0.9, 0) : col(m.c), opacity:hl ? 0.38 : 1, lineCap:LineCapStyle.Round});
+      }
+    });
+    await state.dl.save({filename:base+'-with-notes.pdf', data:new Blob([await doc.save()], {type:'application/pdf'})});
+  } catch(e){ if (!(e && e.code==='declined')) toast('Could not make the file: '+(e.message || e)); }
+}
 
 /* ---------- TikTok Shop finance ---------- */
 // Payouts (statements) and per-order money lines pulled from TikTok by the tiktok server function.

@@ -118,6 +118,23 @@ select t.ok(t.count('select * from public.members') = 3, 'admin can remove staff
 
 -- Owner back.
 select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
+-- Bills: supplier invoices are for owners and admins only, the documents and the files.
+insert into public.docs(company_id, coll, id, data) select v::uuid, 'bills', 'b1', '{"vendor":"Supplier","paid":false}' from ids where k = 'A';
+select t.works($$insert into storage.objects(bucket_id, name) select 'bills', v || '/b1.pdf' from ids where k = 'A'$$, 'owner can upload a bill');
+select t.ok(t.count($$select * from storage.objects where bucket_id = 'bills'$$) = 1, 'owner can open bill files');
+select t.ok(public.is_private_doc('bills', 'b1'), 'bills are kept out of the live updates other roles hear');
+select t.as_user('00000000-0000-0000-0000-0000000000a1', 'staff@a.com');
+select t.ok(t.count($$select * from public.docs where coll = 'bills'$$) = 0, 'staff cannot see bills');
+select t.fails($$insert into public.docs(company_id, coll, id) select v::uuid, 'bills', 'b2' from ids where k = 'A'$$, 'staff cannot add bills');
+select t.ok(t.count($$select * from storage.objects where bucket_id = 'bills'$$) = 0, 'staff cannot open bill files');
+select t.fails($$insert into storage.objects(bucket_id, name) select 'bills', v || '/s.pdf' from ids where k = 'A'$$, 'staff cannot upload bills');
+select t.as_user('00000000-0000-0000-0000-00000000000b', 'owner@b.com');
+select t.ok(t.count($$select * from public.docs where coll = 'bills'$$) = 0 and t.count($$select * from storage.objects where bucket_id = 'bills'$$) = 0, 'another company cannot see A''s bills');
+select t.fails($$insert into storage.objects(bucket_id, name) select 'bills', v || '/x.pdf' from ids where k = 'A'$$, 'another company cannot upload into A''s bills');
+select t.as_user('00000000-0000-0000-0000-0000000000a3', 'admin@a.com');
+select t.ok(t.count($$select * from public.docs where coll = 'bills'$$) = 1, 'admin can see bills');
+select t.works($$update public.docs set data = data || '{"paid":true}' where coll = 'bills' and id = 'b1'$$, 'admin can mark a bill paid');
+select t.as_user('00000000-0000-0000-0000-00000000000a', 'owner@a.com');
 select t.ok((select name from public.companies) = 'Acme', 'company name unchanged by outsiders');
 select t.ok((select data->>'qty' from public.docs where id = 'i1') = '7', 'item unchanged by outsiders');
 select t.ok((select data from public.docs where id = 'brackets') = '{"medium":100}', 'settings unchanged by staff');

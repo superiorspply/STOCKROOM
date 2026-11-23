@@ -145,6 +145,23 @@ function unwrap(body, type){
   return {body, type};
 }
 async function storage(req, res, url){
+  // Removing files: DELETE /object/<bucket> with {prefixes:[...]}, allowed by the delete rules.
+  const del = url.pathname.match(/^\/storage\/v1\/object\/([^/]+)\/?$/);
+  if (del && req.method === 'DELETE'){
+    const c = bearer(req) || {role:'anon'}, {prefixes = []} = JSON.parse((await readBody(req)).toString() || '{}'), gone = [];
+    for (const n of prefixes){ const rows = await asUser(c, cl => cl.query('delete from storage.objects where bucket_id = $1 and name = $2 returning name', [del[1], n])).catch(() => ({rows:[]}));
+      if (rows.rows.length){ files.delete(del[1] + '/' + n); gone.push({name:n}); } }
+    return send(res, 200, gone);
+  }
+  // Private files (signed-in download): only when the read rules allow it.
+  const pm = url.pathname.match(/^\/storage\/v1\/object\/(?:authenticated\/)?([^/]+)\/(.+)$/);
+  if (pm && req.method === 'GET' && !url.pathname.includes('/object/public/')){
+    const c = bearer(req) || {role:'anon'}, name = decodeURIComponent(pm[2]);
+    const ok = await asUser(c, cl => cl.query('select 1 from storage.objects where bucket_id = $1 and name = $2', [pm[1], name])).then(r => r.rows.length > 0).catch(() => false);
+    const f = files.get(pm[1] + '/' + name);
+    if (!ok || !f) return send(res, 400, {statusCode:'404', error:'not_found', message:'Object not found'});
+    return send(res, 200, f.body, {'content-type':f.type});
+  }
   const m = url.pathname.match(/^\/storage\/v1\/object\/(public\/)?([^/]+)\/(.+)$/);
   if (!m) return send(res, 404, {message:'not found'});
   const [, pub, bucket, name] = m, key = bucket + '/' + decodeURIComponent(name);

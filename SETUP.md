@@ -222,3 +222,5 @@ Anyone can open the site, create an account and set up their own company. Each c
 - **Backups:** the app's **Back up now** button saves a file you can import again later. Supabase's paid plans also back up the database daily.
 - **Photo links:** product photos are viewable by anyone who has a photo's exact link. The links are random and impossible to guess, and nothing else is public.
 - **Ask and Live:** these were turned off for the website, since they need a paid Claude API key.
+
+**Bills setup (once):** run [`supabase/migrations/20261122000000_bills.sql`](https://raw.githubusercontent.com/superiorspply/STOCKROOM/main/supabase/migrations/20261122000000_bills.sql) in the SQL Editor. It adds the private storage for supplier invoices and keeps bills visible to owners and admins only. Then open Reports → Bills.

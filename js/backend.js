@@ -371,6 +371,28 @@ const runtime = {
       }
     };
   },
+  // Bills (supplier invoices): files in the private "bills" bucket at <company id>/<random name>, which only
+  // owners and admins can read or change. They are fetched as files when opened, never shared by link.
+  bills(){
+    const ext = t => t === 'application/pdf' ? 'pdf' : t === 'image/png' ? 'png' : t === 'image/webp' ? 'webp' : 'jpg';
+    return {
+      async upload(file){
+        const type = file.type || 'application/pdf';
+        if (!/^(application\/pdf|image\/(jpeg|png|webp))$/.test(type)) throw new Error('Add a PDF or a photo (JPEG, PNG or WebP).');
+        if (file.size > 25*1024*1024) throw new Error('That file is over 25 MB.');
+        const path = S.company.id + '/' + newId() + '.' + ext(type);
+        const {error} = await sb.storage.from('bills').upload(path, file, {contentType:type});
+        if (error) throw new Error(/bucket|not found/i.test(error.message) ? 'Bills are not set up in the database yet.' : error.message);
+        return {path, type, size:file.size};
+      },
+      async open(path){
+        const {data, error} = await sb.storage.from('bills').download(path);
+        if (error) throw new Error('Could not open the file. Check your connection and try again.');
+        return data;
+      },
+      async remove(path){ await sb.storage.from('bills').remove([path]); }
+    };
+  },
   assets(){
     return {
       async upload(blob, opts){

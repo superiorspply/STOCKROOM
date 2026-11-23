@@ -6,7 +6,9 @@ import {fileURLToPath} from 'node:url';
 const NM = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../node_modules');
 export const SITE = process.env.SITE || 'http://localhost:8080/';
 export async function browser(){
-  return chromium.launch({executablePath: fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome') ? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' : undefined});
+  // The pre-installed Chromium in cloud sessions, if there is one; otherwise Playwright's own.
+  const exe = ['/opt/pw-browsers/chromium', '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find(f => fs.existsSync(f));
+  return chromium.launch({executablePath:exe});
 }
 export async function context(b, opts){
   const ctx = await b.newContext(Object.assign({viewport:{width:430, height:900}, acceptDownloads:true}, opts || {}));
@@ -22,6 +24,10 @@ export async function context(b, opts){
     r.fulfill({body:fs.readFileSync(path.join(NM, 'globe.gl/dist/globe.gl.min.js')), contentType:'text/javascript'}));
   await ctx.route('https://cdn.jsdelivr.net/npm/three-globe@*/example/img/*', r =>
     r.fulfill({body:fs.readFileSync(['three-globe', 'globe.gl/node_modules/three-globe'].map(d => path.join(NM, d, 'example/img/earth-night.jpg')).find(f => fs.existsSync(f))), contentType:'image/jpeg'}));
+  await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/**', r =>
+    r.fulfill({body:fs.readFileSync(path.join(NM, 'pdfjs-dist/build', r.request().url().split('/').pop())), contentType:'text/javascript'}));
+  await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/**', r =>
+    r.fulfill({body:fs.readFileSync(path.join(NM, 'pdf-lib/dist/pdf-lib.min.js')), contentType:'text/javascript'}));
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({body:'', contentType:'text/css'}));
   return ctx;
 }
